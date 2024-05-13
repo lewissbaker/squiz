@@ -8,6 +8,9 @@ This implementation explores the following ideas:
 - Alternative cancellation mechanism that uses an optional `request_stop()` member-function on the
   `operation_state` object rather than using stop-tokens.
 
+Note that this library makes use of C++26 features such as pack-indexing and as such
+requires a very recent compiler. e.g. Clang-19 or later.
+
 ## Usage
 
 ### CMake Structure
