@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14...3.22)
+cmake_minimum_required(VERSION 3.25...3.29)
 
 project(squiz_tests LANGUAGES CXX)
 
@@ -30,7 +30,7 @@ file(GLOB sources CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp)
 add_executable(${PROJECT_NAME} ${sources})
 target_link_libraries(${PROJECT_NAME} doctest::doctest Squiz::Squiz)
 target_link_libraries(${PROJECT_NAME} Squiz::Squiz)
-set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 23)
+#set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 26)
 
 # enable compiler warnings
 if(NOT TEST_INSTALLED_VERSION)
