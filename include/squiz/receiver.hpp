@@ -15,7 +15,7 @@ concept receiver = nothrow_move_constructible<T> && requires(const T& t) {
   noexcept;
 };
 
-template <receiver R>
+template <typename R>
 using receiver_env_t = decltype(std::declval<const R&>().get_env());
 
 }  // namespace squiz

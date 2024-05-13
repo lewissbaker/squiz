@@ -79,6 +79,16 @@ concept connectable_to = sender_in<T, receiver_env_t<Receiver>> &&
 };
 
 template <typename T, typename Receiver>
+inline constexpr bool is_nothrow_connectable_v = false;
+
+template <typename T, typename Receiver>
+requires requires(T&& sender, Receiver r) {
+  { std::forward<T>(sender).connect(std::move(r)) }
+  noexcept;
+}
+inline constexpr bool is_nothrow_connectable_v<T, Receiver> = true;
+
+template <typename T, typename Receiver>
 concept nothrow_connectable_to = connectable_to<T, Receiver> &&
     requires(T&& sender, Receiver r) {
   { std::forward<T>(sender).connect(std::move(r)) }
@@ -86,7 +96,6 @@ concept nothrow_connectable_to = connectable_to<T, Receiver> &&
 };
 
 template <typename T, typename Receiver>
-requires connectable_to<T, Receiver>
 using connect_result_t =
     decltype(std::declval<T>().connect(std::declval<Receiver>()));
 

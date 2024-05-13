@@ -1,0 +1,10 @@
+///////////////////////////////////////////////////////////////////////////////
+// Squiz
+// Copyright 2024, Toyota Motor Corporation
+// Licensed under Apache License 2.0 with LLVM Exceptions.
+///////////////////////////////////////////////////////////////////////////////
+#pragma once
+
+#include <squiz/completion_signatures.hpp>
+
+namespace squiz::detail {}  // namespace squiz::detail
