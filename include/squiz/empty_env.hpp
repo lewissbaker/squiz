@@ -3,6 +3,8 @@
 // Copyright 2024, Toyota Motor Corporation
 // Licensed under Apache License 2.0 with LLVM Exceptions.
 ///////////////////////////////////////////////////////////////////////////////
-#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#pragma once
 
-#include <doctest/doctest.h>
+namespace squiz {
+struct empty_env {};
+}  // namespace squiz
