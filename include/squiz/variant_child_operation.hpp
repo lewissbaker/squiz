@@ -17,12 +17,6 @@
 #include <squiz/sender.hpp>
 
 namespace squiz {
-
-  /// A simple tag type that can be used as the \c Tag template parameter of
-  /// the \c variant_child_operation template in cases where there is only one
-  /// such child.s
-  template<std::size_t Idx>
-  struct indexed_source_tag {};
   
   /// CRTP base-class for operation_state types that allows an implementation
   /// to have a union of child operation_state types stored as a sub-object in a

@@ -12,6 +12,7 @@
 #include <squiz/concepts.hpp>
 #include <squiz/detail/member_type.hpp>
 #include <squiz/inlinable_operation_state.hpp>
+#include <squiz/source_tag.hpp>
 #include <squiz/variant_child_operation.hpp>
 
 namespace squiz {

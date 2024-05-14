@@ -17,8 +17,6 @@
 
 namespace squiz {
 
-struct source_tag {};
-
 /// CRTP base-class for operation_state types which can be used to store
 /// child operation_state objects in a way that enables the child
 /// operation_state to avoid having to store the receiver.

@@ -15,6 +15,7 @@
 #include <squiz/detail/member_type.hpp>
 #include <squiz/detail/set_value_signature.hpp>
 #include <squiz/inlinable_operation_state.hpp>
+#include <squiz/source_tag.hpp>
 
 namespace squiz {
 
