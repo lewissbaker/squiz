@@ -7,9 +7,6 @@
 
 #include <squiz/concepts.hpp>
 
-#include <tuple>
-#include <variant>
-
 namespace squiz {
 
 /// Tag types used as the return-type in a completion-signature to indicate what
@@ -170,36 +167,5 @@ template <typename Sigs>
 using error_or_stopped_signatures_t = transform_completion_signatures_t<
     Sigs,
     detail::only_tags<set_error_t, set_stopped_t>>;
-
-/// Meta-function that maps a completion-signature of the form 'Tag(Args...)' to
-/// the type 'std::tuple<Tag, Args...>'
-template <typename Sig>
-struct completion_signature_to_tuple;
-
-template <typename Tag, typename... Args>
-struct completion_signature_to_tuple<Tag(Args...)> {
-  using type = std::tuple<Tag, Args...>;
-};
-
-template <typename Sig>
-using completion_signature_to_tuple_t =
-    typename completion_signature_to_tuple<Sig>::type;
-
-/// Meta-function that maps a set of completion-signatures to a std::variant
-/// std::monostate and a std::tuple<Tag, Args...> entry, one for each input
-/// completion-signature.
-template <typename Sigs>
-struct completion_signatures_to_variant_of_tuple;
-
-template <typename... Sigs>
-struct completion_signatures_to_variant_of_tuple<
-    completion_signatures<Sigs...>> {
-  using type =
-      std::variant<std::monostate, completion_signature_to_tuple_t<Sigs>...>;
-};
-
-template <typename Sigs>
-using completion_signatures_to_variant_of_tuple_t =
-    typename completion_signatures_to_variant_of_tuple<Sigs>::type;
 
 }  // namespace squiz
