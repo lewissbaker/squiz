@@ -40,6 +40,7 @@ add_library(${PROJECT_NAME} ${headers} ${sources})
 
 #set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 26)
 target_compile_options(${PROJECT_NAME} PUBLIC "$<$<COMPILE_LANG_AND_ID:CXX,Clang>:-std=c++2c>")
+target_compile_options(${PROJECT_NAME} PUBLIC "$<$<COMPILE_LANG_AND_ID:CXX,Clang>:-fexperimental-library>")
 
 # being a cross-platform target, we enforce standards conformance on MSVC
 target_compile_options(${PROJECT_NAME} PUBLIC "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/permissive->")
