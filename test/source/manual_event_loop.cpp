@@ -160,3 +160,54 @@ TEST_CASE(
     }
   }
 }
+
+TEST_CASE(
+    "manual_event_loop with multiple threads - cancellation stress test") {
+  struct receiver {
+    std::binary_semaphore& sem;
+    void set_value() noexcept {
+      CHECK(false);
+      sem.release();
+    }
+    void set_stopped() noexcept {
+      CHECK(false);
+      sem.release();
+    }
+    void set_error(std::exception_ptr) noexcept { sem.release(); }
+    squiz::empty_env get_env() const noexcept { return {}; }
+  };
+
+  struct dummy_error {};
+
+  squiz::manual_event_loop loop;
+
+  auto sched = loop.get_scheduler();
+
+  {
+    std::jthread thread1([&](std::stop_token st) { loop.run(st); });
+    std::jthread thread2([&](std::stop_token st) { loop.run(st); });
+
+    std::binary_semaphore sem(0);
+    for (unsigned int i = 0; i < 10'000; ++i) {
+      bool has_run = false;
+      // An operation where the middle operation fails and causes a stop-request
+      // for the others.
+      auto op = squiz::then_sender(
+                    squiz::when_all(
+                        sched.schedule(),
+                        sched.schedule(),
+                        squiz::then_sender(
+                            squiz::just_sender(), [] { throw dummy_error{}; }),
+                        sched.schedule(),
+                        sched.schedule()),
+                    [&] noexcept { has_run = true; })
+                    .connect(receiver{sem});
+      op.start();
+      sem.acquire();
+
+      // Lambda of then_sender() shouldn't have run because when_all() op should
+      // complet with error.
+      CHECK(!has_run);
+    }
+  }
+}
