@@ -60,6 +60,34 @@ template <typename Sender, typename... Envs>
 using completion_signatures_for_t =
     typename completion_signatures_for<Sender, Envs...>::type;
 
+//
+// is_always_nothrow_connectable_v
+//
+
+template <typename S, typename... Env>
+inline constexpr bool is_always_nothrow_connectable_v = false;
+
+template <typename S>
+  requires requires(S&& s) {
+    { std::forward<S>(s).is_always_nothrow_connectable() } -> bool_constant;
+  }
+inline constexpr bool is_always_nothrow_connectable_v<S> =
+    decltype(std::declval<S>().is_always_nothrow_connectable())::value;
+
+template <typename S, typename Env>
+  requires requires(S&& s, Env&& env) {
+    {
+      std::forward<S>(s).is_always_nothrow_connectable(std::forward<Env>(env))
+    } -> bool_constant;
+  }
+inline constexpr bool is_always_nothrow_connectable_v<S, Env> =
+    decltype(std::declval<S>().is_always_nothrow_connectable(
+        std::declval<Env>()))::value;
+
+template <typename S, typename Env>
+inline constexpr bool is_always_nothrow_connectable_v<S, Env> =
+    is_always_nothrow_connectable_v<S>;
+
 namespace detail {
 
 template <typename T, typename... Env>

@@ -6,6 +6,7 @@
 #pragma once
 
 #include <concepts>
+#include <type_traits>
 
 namespace squiz {
 
@@ -37,5 +38,8 @@ inline constexpr bool is_instance_of_v<Template<Ts...>, Template> = true;
 
 template <typename T, template <typename...> class Template>
 concept instance_of = detail::is_instance_of_v<T, Template>;
+
+template <typename T>
+concept bool_constant = one_of<T, std::true_type, std::false_type>;
 
 }  // namespace squiz

@@ -120,6 +120,16 @@ struct cond_sender {
               detail::member_type_t<Self, FalseSource>,
               Envs...>>;
 
+  template <typename Self, typename... Envs>
+  auto is_always_nothrow_connectable(this Self&&, Envs...)
+      -> std::bool_constant<
+          squiz::is_always_nothrow_connectable_v<
+              detail::member_type_t<Self, TrueSource>,
+              Envs...> &&
+          squiz::is_always_nothrow_connectable_v<
+              detail::member_type_t<Self, FalseSource>,
+              Envs...>>;
+
   template <typename TrueSource2>
     requires std::constructible_from<TrueSource, TrueSource2>
   cond_sender(std::true_type, TrueSource2&& src) noexcept(

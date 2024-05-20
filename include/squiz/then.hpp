@@ -121,6 +121,16 @@ struct then_sender {
               Envs...>,
           then_detail::then_completion_transform<Func>>;
 
+  template <typename Self, typename... Envs>
+  auto is_always_nothrow_connectable(this Self&&, Envs...)
+      -> std::bool_constant<
+          (std::is_nothrow_constructible_v<
+               Func,
+               detail::member_type_t<Self, Func>> &&
+           is_always_nothrow_connectable_v<
+               detail::member_type_t<Self, Source>,
+               Envs...>)>;
+
   [[no_unique_address]] Source source;
   [[no_unique_address]] Func func;
 

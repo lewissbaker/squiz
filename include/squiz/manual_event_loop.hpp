@@ -63,6 +63,8 @@ private:
     static auto get_completion_signatures()
         -> completion_signatures<set_value_t(), set_stopped_t()>;
 
+    static auto is_always_nothrow_connectable() -> std::true_type;
+
     template <typename Receiver>
     schedule_op<Receiver> connect(Receiver r) const noexcept {
       return {*loop_, std::move(r)};
