@@ -7,6 +7,12 @@ This implementation explores the following ideas:
   stored inline as a sub-object of a parent operation-state.
 - Alternative cancellation mechanism that uses an optional `request_stop()` member-function on the
   `operation_state` object rather than using stop-tokens.
+- Additional `is_always_nothrow_connectable()` query on senders that allows senders to
+  declare that the `connect()` overload will be noexcept regardless of what receiver
+  type is passed to it. This is needed to avoid algorithms like `let_value()`, which call
+  `connect()` during their execution, from unconditionally including `set_error_t(std::exception_ptr)`
+  in their completion-signatures, just in case the call to `connect()` on the body-sender is not
+  `noexcept`, which in general can't be determined until we have a receiver.
 
 Note that this library makes use of C++26 features such as pack-indexing and as such
 requires a very recent compiler. e.g. Clang-19 or later.
