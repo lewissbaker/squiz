@@ -12,10 +12,10 @@
 
 #include <squiz/child_operation.hpp>
 #include <squiz/completion_signatures.hpp>
-#include <squiz/detail/member_type.hpp>
-#include <squiz/detail/set_value_signature.hpp>
 #include <squiz/inlinable_operation_state.hpp>
 #include <squiz/source_tag.hpp>
+#include <squiz/detail/member_type.hpp>
+#include <squiz/detail/set_value_signature.hpp>
 
 namespace squiz {
 
@@ -45,7 +45,9 @@ public:
     self.child_base::start();
   }
 
-  void request_stop() noexcept requires child_base::is_stoppable {
+  void request_stop() noexcept
+    requires child_base::is_stoppable
+  {
     child_base::request_stop();
   }
 
@@ -88,21 +90,23 @@ namespace then_detail {
 template <typename Func>
 struct then_completion_transform {
   template <typename... Args>
-  requires std::is_nothrow_invocable_v<Func, Args...>
-  static auto apply(set_value_t (*)(Args...)) -> completion_signatures<
-      detail::set_value_signature_t<std::invoke_result_t<Func, Args...>>>;
+    requires std::is_nothrow_invocable_v<Func, Args...>
+  static auto apply(set_value_t (*)(Args...))
+      -> completion_signatures<
+          detail::set_value_signature_t<std::invoke_result_t<Func, Args...>>>;
 
   template <typename... Args>
-  static auto apply(set_value_t (*)(Args...)) -> completion_signatures<
-      detail::set_value_signature_t<std::invoke_result_t<Func, Args...>>,
-      set_error_t(std::exception_ptr)>;
+  static auto apply(set_value_t (*)(Args...))
+      -> completion_signatures<
+          detail::set_value_signature_t<std::invoke_result_t<Func, Args...>>,
+          set_error_t(std::exception_ptr)>;
 
   template <typename E>
-  static auto apply(set_error_t (*)(E))
-      -> completion_signatures<set_error_t(E)>;
+  static auto
+      apply(set_error_t (*)(E)) -> completion_signatures<set_error_t(E)>;
 
-  static auto apply(set_stopped_t (*)())
-      -> completion_signatures<set_stopped_t()>;
+  static auto
+      apply(set_stopped_t (*)()) -> completion_signatures<set_stopped_t()>;
 };
 
 }  // namespace then_detail

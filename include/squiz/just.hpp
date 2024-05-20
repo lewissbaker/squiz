@@ -11,8 +11,8 @@
 #include <utility>
 
 #include <squiz/completion_signatures.hpp>
-#include <squiz/detail/member_type.hpp>
 #include <squiz/inlinable_operation_state.hpp>
+#include <squiz/detail/member_type.hpp>
 
 namespace squiz {
 
@@ -43,17 +43,22 @@ private:
 template <typename... Vs>
 struct just_sender {
   template <typename Self>
-  requires(
-      std::constructible_from<Vs, detail::member_type_t<Self, Vs>>&&...)  //
-      auto get_completion_signatures(this Self&&)
-          -> completion_signatures<set_value_t(Vs...)>;
+    requires(std::constructible_from<Vs, detail::member_type_t<Self, Vs>> &&
+             ...)  //
+  auto get_completion_signatures(this Self&&)
+      -> completion_signatures<set_value_t(Vs...)>;
 
-  template <typename Self, typename Receiver>
-  just_op<Receiver, Vs...> connect(this Self&& self, Receiver r)  //
-      noexcept((
+  template <typename Self>
+  auto is_always_nothrow_connectable(this Self&&)
+      -> std::bool_constant<(
           std::
               is_nothrow_constructible_v<Vs, detail::member_type_t<Self, Vs>> &&
-          ...)) {
+          ...)>;
+
+  template <typename Self, typename Receiver>
+  just_op<Receiver, Vs...> connect(this Self&& self, Receiver r) noexcept(
+      (std::is_nothrow_constructible_v<Vs, detail::member_type_t<Self, Vs>> &&
+       ...)) {
     return std::apply(
         [&](detail::member_type_t<Self, Vs>&&... vs) {
           return just_op<Receiver, Vs...>(
@@ -63,8 +68,8 @@ struct just_sender {
   }
 
   template <typename... V2s>
-  requires(std::constructible_from<Vs, V2s>&&...)  //
-      explicit just_sender(V2s&&... vs)            //
+    requires(std::constructible_from<Vs, V2s> && ...)  //
+  explicit just_sender(V2s&&... vs)                    //
       noexcept((std::is_nothrow_constructible_v<Vs, V2s> && ...))
     : values_{std::forward<V2s>(vs)...} {}
 

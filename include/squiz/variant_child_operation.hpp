@@ -10,11 +10,11 @@
 #include <type_traits>
 #include <utility>
 
-#include <squiz/detail/connect_at.hpp>
-#include <squiz/detail/index_of.hpp>
 #include <squiz/operation_state.hpp>
 #include <squiz/request_stop.hpp>
 #include <squiz/sender.hpp>
+#include <squiz/detail/connect_at.hpp>
+#include <squiz/detail/dispatch_index.hpp>
 
 namespace squiz {
   
@@ -105,13 +105,14 @@ protected:
   /// Use the result of this as the \c Idx template parameter for the
   /// construct/destruct/start/request_stop functions.
   template <typename Sender>
-  requires one_of<Sender, Senders...>
+    requires one_of<Sender, Senders...>
   static constexpr std::size_t sender_index =
       detail::index_of_v<Sender, Senders...>;
 
   /// A no-op. Leaves the child operation_state storage uninitialized.
   ///
-  /// Call \c construct<Idx>() to construct a particular child operation_state object.
+  /// Call \c construct<Idx>() to construct a particular child operation_state
+  /// object.
   variant_child_operation() noexcept = default;
   ~variant_child_operation() noexcept = default;
 
