@@ -15,38 +15,40 @@
 #include <squiz/sender.hpp>
 #include <squiz/detail/connect_at.hpp>
 #include <squiz/detail/dispatch_index.hpp>
+#include <squiz/detail/index_of.hpp>
 
 namespace squiz {
-  
-  /// CRTP base-class for operation_state types that allows an implementation
-  /// to have a union of child operation_state types stored as a sub-object in a
-  /// way that allows those child operations to avoid storing the receiver by
-  /// instead computing the receiver on-demand from the address of the child
-  /// operation-state.
-  ///
-  /// This class provides the storage for the any of the operation-states of the
-  /// specified types in the \c Senders pack. The lifetimes of these operation-states
-  /// must be manually managed by the derived class by calling the construct<Idx>()
-  /// and destruct<Idx>() methods where Senders...[Idx] is the sender type used to
-  /// construct that operation-state.
-  ///
-  /// Child senders will be connected with a receiver that forwards its operations
-  /// to method-calls on the parent operation-state, passing a \c Tag<Idx> object
-  /// as the first argument to allow distinguishing which child operation_state the
-  /// signal came from.
-  ///
-  /// Use this to store child operation-states that do not have overlapping lifetimes
-  /// in a way that allows the storage to be reused.
-  ///
-  /// \tparam ParentOp
-  /// The type of the operation_state that is inherting from this class.
-  ///
-  /// \tparam Tag
-  /// A tag-type template that will be instantiated with Idx and passed to the
-  ///
-  /// \tparam Senders
-  /// A list of sender-types that might be used to construct the child operation_state.
-  /// Only one of these operation_state objects may be constructed at a time.
+
+/// CRTP base-class for operation_state types that allows an implementation
+/// to have a union of child operation_state types stored as a sub-object in a
+/// way that allows those child operations to avoid storing the receiver by
+/// instead computing the receiver on-demand from the address of the child
+/// operation-state.
+///
+/// This class provides the storage for the any of the operation-states of the
+/// specified types in the \c Senders pack. The lifetimes of these
+/// operation-states must be manually managed by the derived class by calling
+/// the construct<Idx>() and destruct<Idx>() methods where Senders...[Idx] is
+/// the sender type used to construct that operation-state.
+///
+/// Child senders will be connected with a receiver that forwards its operations
+/// to method-calls on the parent operation-state, passing a \c Tag<Idx> object
+/// as the first argument to allow distinguishing which child operation_state
+/// the signal came from.
+///
+/// Use this to store child operation-states that do not have overlapping
+/// lifetimes in a way that allows the storage to be reused.
+///
+/// \tparam ParentOp
+/// The type of the operation_state that is inherting from this class.
+///
+/// \tparam Tag
+/// A tag-type template that will be instantiated with Idx and passed to the
+///
+/// \tparam Senders
+/// A list of sender-types that might be used to construct the child
+/// operation_state. Only one of these operation_state objects may be
+/// constructed at a time.
 template <
     typename ParentOp,
     template <std::size_t>
@@ -114,6 +116,7 @@ protected:
   template <std::size_t Idx>
   static constexpr bool is_nothrow_constructible =
       nothrow_connectable_to<Senders...[Idx], child_receiver<Idx>>;
+
   /// A no-op. Leaves the child operation_state storage uninitialized.
   ///
   /// Call \c construct<Idx>() to construct a particular child operation_state
@@ -136,14 +139,41 @@ protected:
     get<Idx>().~child_op_t<Idx>();
   }
 
+  void destruct(std::size_t index) noexcept {
+    detail::dispatch_index<sender_count>(
+        [this]<std::size_t Idx>(
+            std::integral_constant<std::size_t, Idx>) noexcept {
+          this->destruct<Idx>();
+        },
+        index);
+  }
+
   template <std::size_t Idx>
   void start() noexcept {
     get<Idx>().start();
   }
 
+  void start(std::size_t index) noexcept {
+    detail::dispatch_index<sender_count>(
+        [this]<std::size_t Idx>(
+            std::integral_constant<std::size_t, Idx>) noexcept {
+          this->start<Idx>();
+        },
+        index);
+  }
+
   template <std::size_t Idx>
   void request_stop() noexcept {
     squiz::request_stop(get<Idx>());
+  }
+
+  void request_stop(std::size_t index) noexcept {
+    detail::dispatch_index<sender_count>(
+        [this]<std::size_t Idx>(
+            std::integral_constant<std::size_t, Idx>) noexcept {
+          this->request_stop<Idx>();
+        },
+        index);
   }
 
 private:
