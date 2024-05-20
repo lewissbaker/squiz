@@ -58,11 +58,11 @@ Cpp11BracedListStyle: true
 FixNamespaceComments: true
 IncludeBlocks: Preserve
 IncludeCategories:
-- Regex: '^<unifex/config.hpp>$'
+- Regex: '^<squiz/config.hpp>$'
   Priority: 1
-- Regex: '^<unifex/detail/'
+- Regex: '^<squiz/detail/'
   Priority: 3
-- Regex: '^<unifex/'
+- Regex: '^<squiz/'
   Priority: 2
 - Regex: '^"'
   Priority: 4
