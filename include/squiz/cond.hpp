@@ -10,10 +10,10 @@
 #include <utility>
 
 #include <squiz/concepts.hpp>
-#include <squiz/detail/member_type.hpp>
 #include <squiz/inlinable_operation_state.hpp>
 #include <squiz/source_tag.hpp>
 #include <squiz/variant_child_operation.hpp>
+#include <squiz/detail/member_type.hpp>
 
 namespace squiz {
 
@@ -66,7 +66,9 @@ public:
     }
   }
 
-  void request_stop() noexcept requires variant_base::is_any_stoppable {
+  void request_stop() noexcept
+    requires variant_base::is_any_stoppable
+  {
     if (true_branch_) {
       if constexpr (variant_base::template is_stoppable<0>) {
         variant_base::template request_stop<0>();
@@ -119,22 +121,22 @@ struct cond_sender {
               Envs...>>;
 
   template <typename TrueSource2>
-  requires std::constructible_from<TrueSource, TrueSource2>
-  cond_sender(std::true_type, TrueSource2&& src)
-  noexcept(std::is_nothrow_constructible_v<TrueSource, TrueSource2>)
+    requires std::constructible_from<TrueSource, TrueSource2>
+  cond_sender(std::true_type, TrueSource2&& src) noexcept(
+      std::is_nothrow_constructible_v<TrueSource, TrueSource2>)
     : true_branch_(true)
     , true_src_(std::forward<TrueSource2>(src)) {}
 
   template <typename FalseSource2>
-  requires std::constructible_from<FalseSource, FalseSource2>
-  cond_sender(std::false_type, FalseSource2&& src)
-  noexcept(std::is_nothrow_constructible_v<FalseSource, FalseSource2>)
+    requires std::constructible_from<FalseSource, FalseSource2>
+  cond_sender(std::false_type, FalseSource2&& src) noexcept(
+      std::is_nothrow_constructible_v<FalseSource, FalseSource2>)
     : true_branch_(false)
     , false_src_(std::forward<FalseSource2>(src)) {}
 
   cond_sender(cond_sender&& other) noexcept(
-      std::is_nothrow_move_constructible_v<TrueSource>&&
-          std::is_nothrow_move_constructible_v<FalseSource>)
+      std::is_nothrow_move_constructible_v<TrueSource> &&
+      std::is_nothrow_move_constructible_v<FalseSource>)
     : true_branch_(other.true_branch_) {
     if (true_branch_) {
       std::construct_at(std::addressof(true_src_), std::move(other).true_src_);
@@ -145,9 +147,10 @@ struct cond_sender {
   }
 
   cond_sender(const cond_sender&& other)  //
-      noexcept(std::is_nothrow_copy_constructible_v<TrueSource>&&
-                   std::is_nothrow_copy_constructible_v<FalseSource>)  //
-      requires std::copy_constructible<TrueSource> &&
+      noexcept(
+          std::is_nothrow_copy_constructible_v<TrueSource> &&
+          std::is_nothrow_copy_constructible_v<FalseSource>)  //
+    requires std::copy_constructible<TrueSource> &&
       std::copy_constructible<FalseSource>  //
     : true_branch_(other.true_branch_) {
     if (true_branch_) {
@@ -213,8 +216,9 @@ auto cond(
     bool condition,
     TrueSource&& true_src,
     FalseSource&& false_src)  //
-    noexcept(nothrow_decay_copyable<TrueSource>&&
-                 nothrow_decay_copyable<FalseSource>)  //
+    noexcept(
+        nothrow_decay_copyable<TrueSource> &&
+        nothrow_decay_copyable<FalseSource>)  //
     -> cond_sender<
         std::remove_cvref_t<TrueSource>,
         std::remove_cvref_t<FalseSource>> {
@@ -230,14 +234,12 @@ auto cond(
 // holding either type. We can just return the same type as the input,
 // and only choose which of the arguments to return.
 template <typename TrueSource, typename FalseSource>
-requires std::
-    same_as<std::remove_cvref_t<TrueSource>, std::remove_cvref_t<FalseSource>>
-auto cond(
-    bool condition,
-    TrueSource&& true_src,
-    FalseSource&& false_src) noexcept(nothrow_decay_copyable<TrueSource>&&
-                                          nothrow_decay_copyable<FalseSource>)
-    -> std::remove_cvref_t<TrueSource> {
+  requires std::same_as<
+               std::remove_cvref_t<TrueSource>,
+               std::remove_cvref_t<FalseSource>>
+auto cond(bool condition, TrueSource&& true_src, FalseSource&& false_src) noexcept(
+    nothrow_decay_copyable<TrueSource> &&
+    nothrow_decay_copyable<FalseSource>) -> std::remove_cvref_t<TrueSource> {
   if (condition) {
     return std::forward<TrueSource>(true_src);
   } else {
