@@ -36,13 +36,15 @@ private:
       FalseSource>;
 
 public:
-  cond_op(std::true_type, TrueSource&& src, Receiver rcvr)
+  cond_op(std::true_type, TrueSource&& src, Receiver rcvr) noexcept(
+      variant_base::template is_nothrow_constructible<0>)
     : inlinable_base(std::move(rcvr))
     , true_branch_(true) {
     variant_base::template construct<0>(std::forward<TrueSource>(src));
   }
 
-  cond_op(std::false_type, FalseSource&& src, Receiver rcvr)
+  cond_op(std::false_type, FalseSource&& src, Receiver rcvr) noexcept(
+      variant_base::template is_nothrow_constructible<1>)
     : inlinable_base(std::move(rcvr))
     , true_branch_(false) {
     variant_base::template construct<1>(std::forward<FalseSource>(src));
@@ -164,7 +166,21 @@ struct cond_sender {
   }
 
   template <typename Self, typename Receiver>
-  auto connect(this Self&& self, Receiver rcvr) {
+  auto connect(this Self&& self, Receiver rcvr) noexcept(
+      std::is_nothrow_constructible_v<
+          cond_op<
+              detail::member_type_t<Self, TrueSource>,
+              detail::member_type_t<Self, FalseSource>,
+              Receiver>,
+          std::true_type,
+          detail::member_type_t<Self, TrueSource>> &&
+      std::is_nothrow_constructible_v<
+          cond_op<
+              detail::member_type_t<Self, TrueSource>,
+              detail::member_type_t<Self, FalseSource>,
+              Receiver>,
+          std::false_type,
+          detail::member_type_t<Self, FalseSource>>) {
     using op_t = cond_op<
         detail::member_type_t<Self, TrueSource>,
         detail::member_type_t<Self, FalseSource>,

@@ -109,6 +109,11 @@ protected:
   static constexpr std::size_t sender_index =
       detail::index_of_v<Sender, Senders...>;
 
+  /// Query if constructing a particular child operation state is potentially
+  /// throwing.
+  template <std::size_t Idx>
+  static constexpr bool is_nothrow_constructible =
+      nothrow_connectable_to<Senders...[Idx], child_receiver<Idx>>;
   /// A no-op. Leaves the child operation_state storage uninitialized.
   ///
   /// Call \c construct<Idx>() to construct a particular child operation_state
@@ -117,8 +122,8 @@ protected:
   ~variant_child_operation() noexcept = default;
 
   template <std::size_t Idx>
-  void construct(Senders...[Idx] && sender) noexcept(
-      nothrow_connectable_to<Senders...[Idx], child_receiver<Idx>>) {
+  void
+  construct(Senders...[Idx] && sender) noexcept(is_nothrow_constructible<Idx>) {
     ParentOp* parent_op = static_cast<ParentOp*>(this);
     detail::connect_at(
         reinterpret_cast<child_op_t<Idx>*>(&op_storage_),
