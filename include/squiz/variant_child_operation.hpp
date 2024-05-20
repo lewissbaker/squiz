@@ -97,6 +97,10 @@ class variant_child_operation {
   using child_op_t = connect_result_t<Senders...[Idx], child_receiver<Idx>>;
 
 protected:
+  /// Query the number of different operation-state types that this child
+  /// operation can hold.
+  static constexpr std::size_t sender_count = sizeof...(Senders);
+
   /// Query if a paricular child operation_state is stoppable.
   template <std::size_t Idx>
   static constexpr bool is_stoppable =
