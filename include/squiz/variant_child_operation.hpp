@@ -132,7 +132,7 @@ protected:
   }
 
   template <std::size_t Idx>
-  void destroy() noexcept {
+  void destruct() noexcept {
     get<Idx>().~child_op_t<Idx>();
   }
 

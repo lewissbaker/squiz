@@ -52,9 +52,9 @@ public:
 
   ~cond_op() {
     if (true_branch_) {
-      variant_base::template destroy<0>();
+      variant_base::template destruct<0>();
     } else {
-      variant_base::template destroy<1>();
+      variant_base::template destruct<1>();
     }
   }
 
