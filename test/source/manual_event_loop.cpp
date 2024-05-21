@@ -42,8 +42,8 @@ TEST_CASE("manual_event_loop run task in other thread") {
 
     struct receiver {
       std::binary_semaphore& sem;
-      void set_value() noexcept { sem.release(); }
-      void set_stopped() noexcept {
+      void set_result(squiz::value_t<>) noexcept { sem.release(); }
+      void set_result(squiz::stopped_t) noexcept {
         CHECK(false);
         sem.release();
       }
@@ -67,8 +67,8 @@ TEST_CASE("manual_event_loop request_stop before executed") {
 
   struct receiver {
     bool& receiver_invoked;
-    void set_value() noexcept { CHECK(false); }
-    void set_stopped() noexcept { receiver_invoked = true; }
+    void set_result(squiz::value_t<>) noexcept { CHECK(false); }
+    void set_result(squiz::stopped_t) noexcept { receiver_invoked = true; }
   };
 
   {
@@ -93,8 +93,8 @@ TEST_CASE("manual_event_loop request_stop before executed") {
 TEST_CASE("manual_event_loop with multiple threads - one at a time") {
   struct receiver {
     std::binary_semaphore& sem;
-    void set_value() noexcept { sem.release(); }
-    void set_stopped() noexcept {
+    void set_result(squiz::value_t<>) noexcept { sem.release(); }
+    void set_result(squiz::stopped_t) noexcept {
       CHECK(false);
       sem.release();
     }
@@ -126,8 +126,8 @@ TEST_CASE(
     "manual_event_loop with multiple threads - multiple schedules at a time") {
   struct receiver {
     std::binary_semaphore& sem;
-    void set_value() noexcept { sem.release(); }
-    void set_stopped() noexcept {
+    void set_result(squiz::value_t<>) noexcept { sem.release(); }
+    void set_result(squiz::stopped_t) noexcept {
       CHECK(false);
       sem.release();
     }
@@ -163,21 +163,23 @@ TEST_CASE(
 
 TEST_CASE(
     "manual_event_loop with multiple threads - cancellation stress test") {
+  struct dummy_error {};
+
   struct receiver {
     std::binary_semaphore& sem;
-    void set_value() noexcept {
+    void set_result(squiz::value_t<>) noexcept {
       CHECK(false);
       sem.release();
     }
-    void set_stopped() noexcept {
+    void set_result(squiz::stopped_t) noexcept {
       CHECK(false);
       sem.release();
     }
-    void set_error(std::exception_ptr) noexcept { sem.release(); }
+    void set_result(squiz::error_t<dummy_error>, dummy_error) noexcept {
+      sem.release();
+    }
     squiz::empty_env get_env() const noexcept { return {}; }
   };
-
-  struct dummy_error {};
 
   squiz::manual_event_loop loop;
 
@@ -196,8 +198,7 @@ TEST_CASE(
                     squiz::when_all(
                         sched.schedule(),
                         sched.schedule(),
-                        squiz::then_sender(
-                            squiz::just_sender(), [] { throw dummy_error{}; }),
+                        squiz::just_error_sender{dummy_error{}},
                         sched.schedule(),
                         sched.schedule()),
                     [&] noexcept { has_run = true; })

@@ -11,13 +11,13 @@
 
 namespace squiz::detail {
 
-/// Meta-function that maps a completion-signature of the form 'Tag(Args...)' to
-/// the type 'std::tuple<Tag, Args...>'
+/// Meta-function that maps a completion-signature of the form
+/// 'result_t<Tag, Args...>' to the type 'std::tuple<Tag, Args...>'.
 template <typename Sig>
 struct completion_signature_to_tuple;
 
 template <typename Tag, typename... Args>
-struct completion_signature_to_tuple<Tag(Args...)> {
+struct completion_signature_to_tuple<result_t<Tag, Args...>> {
   using type = std::tuple<Tag, Args...>;
 };
 

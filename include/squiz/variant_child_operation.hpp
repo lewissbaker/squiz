@@ -70,17 +70,10 @@ class variant_child_operation {
       return child_receiver(parent_op);
     }
 
-    template <typename... Vs>
-    void set_value(Vs&&... vs) noexcept {
-      parent_op_->set_value(tag_t{}, std::forward<Vs>(vs)...);
+    template<typename Signal, typename... Datums>
+    void set_result(result_t<Signal, Datums...> sig, parameter_type<Datums>... datums) noexcept {
+      parent_op_->set_result(tag_t{}, sig, squiz::forward_parameter<Datums>(datums)...);
     }
-
-    template <typename E>
-    void set_error(E&& e) noexcept {
-      parent_op_->set_error(tag_t{}, std::forward<E>(e));
-    }
-
-    void set_stopped() noexcept { parent_op_->set_stopped(tag_t{}); }
 
     auto get_env() const noexcept { return parent_op_->get_env(tag_t{}); }
 

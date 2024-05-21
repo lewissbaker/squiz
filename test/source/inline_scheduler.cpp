@@ -25,7 +25,7 @@ TEST_CASE("squiz::inline_scheduler can schedule") {
 
   struct receiver{
     bool& receiver_invoked;
-    void set_value() noexcept { receiver_invoked = true; }
+    void set_result(squiz::value_t<>) noexcept { receiver_invoked = true; }
     squiz::empty_env get_env() const noexcept { return {}; }
   };
 

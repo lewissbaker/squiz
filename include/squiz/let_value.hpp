@@ -13,6 +13,7 @@
 #include <squiz/inlinable_operation_state.hpp>
 #include <squiz/manual_event_loop.hpp>
 #include <squiz/overload.hpp>
+#include <squiz/receiver.hpp>
 #include <squiz/source_tag.hpp>
 #include <squiz/variant_child_operation.hpp>
 #include <squiz/detail/completion_signatures_to_variant_of_tuple.hpp>
@@ -34,7 +35,7 @@ struct let_value_transform {};
 
 template <typename... Vs, typename BodyFactory>
   requires std::invocable<BodyFactory, Vs&...>
-struct let_value_transform<set_value_t(Vs...), BodyFactory> {
+struct let_value_transform<value_t<Vs...>, BodyFactory> {
   using type = std::invoke_result_t<BodyFactory, Vs&...>;
 };
 
@@ -69,24 +70,15 @@ using let_value_child_op = value_signatures_t<
 //   of the types are potentially throwing if we need to store the body result
 //   while we wait for a delegated concurrent stop-request to finish executing.
 struct transform_body_signatures {
-  template <typename... Vs>
-    requires(std::is_nothrow_move_constructible_v<Vs> && ...)
-  static auto apply(set_value_t (*)(Vs...))
-      -> completion_signatures<set_value_t(Vs...)>;
+  template <typename Tag, typename... Datums>
+    requires(std::is_nothrow_move_constructible_v<Datums> && ...)
+  static auto apply(result_t<Tag, Datums...>)
+      -> completion_signatures<result_t<Tag, Datums...>>;
 
-  template <typename... Vs>
-  static auto
-      apply(set_value_t (*)(Vs...)) -> completion_signatures<
-                                        set_value_t(Vs...),
-                                        set_error_t(std::exception_ptr)>;
-
-  template <typename E>
-    requires std::is_nothrow_move_constructible_v<E>
-  static auto
-      apply(set_error_t (*)(E)) -> completion_signatures<set_error_t(E)>;
-
-  static auto
-      apply(set_stopped_t (*)()) -> completion_signatures<set_stopped_t()>;
+  template <typename Tag, typename... Datums>
+  static auto apply(result_t<Tag, Datums...>) -> completion_signatures<
+                                                  result_t<Tag, Datums...>,
+                                                  error_t<std::exception_ptr>>;
 };
 
 template <typename BodyFactory, typename... Env>
@@ -110,19 +102,16 @@ private:
       std::conditional_t<
           is_body_sender_nothrow_startable<Vs...>,
           completion_signatures<>,
-          completion_signatures<set_error_t(std::exception_ptr)>>>;
+          completion_signatures<error_t<std::exception_ptr>>>>;
 
 public:
   template <typename... Vs>
     requires std::invocable<BodyFactory, Vs&...>
-  static auto apply(set_value_t (*)(Vs...)) -> body_completion_sigs_t<Vs...>;
+  static auto apply(value_t<Vs...>) -> body_completion_sigs_t<Vs...>;
 
-  template <typename E>
-  static auto
-      apply(set_error_t (*)(E)) -> completion_signatures<set_error_t(E)>;
-
-  static auto
-      apply(set_stopped_t (*)()) -> completion_signatures<set_stopped_t()>;
+  template <typename Tag, typename... Datums>
+  static auto apply(result_t<Tag, Datums...>)
+      -> completion_signatures<result_t<Tag, Datums...>>;
 };
 
 template <typename Source, typename BodyFactory, typename... Env>
@@ -156,7 +145,9 @@ private:
 
 public:
   template <typename BodyFactory2>
-  let_value_op(Source&& source, BodyFactory2&& factory, Receiver receiver)
+  let_value_op(Source&& source, BodyFactory2&& factory, Receiver receiver) noexcept(
+      child_base::template is_nothrow_constructible<0> &&
+      std::is_nothrow_constructible_v<BodyFactory, BodyFactory2>)
     : inlinable_base(std::move(receiver))
     , factory_(std::forward<BodyFactory2>(factory)) {
     child_base::template construct<0>(std::forward<Source>(source));
@@ -227,7 +218,10 @@ public:
   }
 
   template <typename... Vs>
-  void set_value(indexed_source_tag<0>, Vs&&... vs) noexcept {
+  void set_result(
+      indexed_source_tag<0>,
+      value_t<Vs...>,
+      parameter_type<Vs>... vs) noexcept {
     using next_sender_t = std::invoke_result_t<BodyFactory, Vs&...>;
     constexpr std::size_t sender_index =
         child_base::template sender_index<next_sender_t>;
@@ -245,20 +239,20 @@ public:
     if ((old_state & stop_requested_flag) != 0) {
       // stop was requested - discard the result and complete with
       // set_stopped().
-      this->get_receiver().set_stopped();
+      squiz::set_stopped(this->get_receiver());
       return;
     }
 
     try {
       auto& value_tuple =
-          value_storage_.template emplace<std::tuple<set_value_t, Vs...>>(
-              set_value_t{}, std::forward<Vs>(vs)...);
+          value_storage_.template emplace<std::tuple<value_tag, Vs...>>(
+              value_tag{}, squiz::forward_parameter<Vs>(vs)...);
 
       child_base::template destruct<0>();
       child_index_ = empty_child_index;
 
       std::apply(
-          [&](set_value_t, Vs&... stored_vs) {
+          [&](value_tag, Vs&... stored_vs) {
             child_base::template construct<sender_index>(
                 std::invoke(std::move(factory_), stored_vs...));
             child_index_ = sender_index;
@@ -271,9 +265,8 @@ public:
       if constexpr (!is_nothrow) {
         // Make sure the value is destroyed first.
         value_storage_.template emplace<0>();
-        [](auto&& r) noexcept {
-          r.set_error(std::current_exception());
-        }(this->get_receiver());
+        squiz::set_error<std::exception_ptr>(
+            this->get_receiver(), std::current_exception());
         return;
       }
       assert(false);
@@ -305,17 +298,13 @@ public:
     }
   }
 
-  template <typename E>
-  void set_error(indexed_source_tag<0>, E&& e) noexcept {
-    this->get_receiver().set_error(std::forward<E>(e));
-  }
-
-  template <std::size_t Idx>
-    requires(Idx == 0)
-  void set_stopped(indexed_source_tag<Idx>) noexcept {
-    [](auto&& r) noexcept {
-      r.set_stopped();
-    }(this->get_receiver());
+  template <one_of<stopped_tag, error_tag> Tag, typename... Datums>
+  void set_result(
+      indexed_source_tag<0>,
+      result_t<Tag, Datums...> sig,
+      parameter_type<Datums>... datums) noexcept {
+    squiz::set_result(
+        this->get_receiver(), sig, squiz::forward_parameter<Datums>(datums)...);
   }
 
   //
@@ -346,33 +335,27 @@ private:
               assert(false);
               std::unreachable();
             },
-            [&]<typename... Vs>(
-                std::tuple<set_value_t, Vs...>& result) noexcept {
+            [&]<typename Tag, typename... Datums>(
+                std::tuple<Tag, Datums...>& result) noexcept {
               std::apply(
-                  [&](set_value_t, Vs&&... vs) noexcept {
-                    [&](auto&& r) noexcept {
-                      r.set_value(std::forward<Vs>(vs)...);
-                    }(this->get_receiver());
+                  [&](Tag, Datums&... datums) noexcept {
+                    squiz::set_result(
+                        this->get_receiver(),
+                        squiz::result<Tag, Datums...>,
+                        squiz::forward_parameter<Datums>(datums)...);
                   },
-                  std::move(result));
-            },
-            [&]<typename E>(std::tuple<set_error_t, E>& result) noexcept {
-              [&](auto&& r) noexcept {
-                r.set_error(std::forward<E>(std::get<1>(result)));
-              }(this->get_receiver());
-            },
-            [&](std::tuple<set_stopped_t>) noexcept {
-              [&](auto&& r) noexcept {
-                r.set_stopped();
-              }(this->get_receiver());
+                  result);
             }),
         result_storage_);
   }
 
 public:
-  template <std::size_t Idx, typename... Vs>
+  template <std::size_t Idx, typename Tag, typename... Datums>
     requires(Idx != 0)
-  void set_value(indexed_source_tag<Idx>, Vs&&... vs) noexcept {
+  void set_result(
+      indexed_source_tag<Idx>,
+      result_t<Tag, Datums...> sig,
+      parameter_type<Datums>... datums) noexcept {
     state_t old_state = state_.load(std::memory_order_acquire);
 
     if (can_complete_inline(old_state)) {
@@ -380,7 +363,10 @@ public:
       // any subsequent stop-request will come from the stop_request()
       // method on this operation state, which is guaranteed not to
       // race with destruction of this operation state by the caller.
-      this->get_receiver().set_value(std::forward<Vs>(vs)...);
+      squiz::set_result(
+          this->get_receiver(),
+          sig,
+          squiz::forward_parameter<Datums>(datums)...);
       return;
     }
 
@@ -390,71 +376,39 @@ public:
     // see who won the race and should deliver the result.
     try {
       auto& result =
-          result_storage_.template emplace<std::tuple<set_value_t, Vs...>>(
-              set_value_t{}, std::forward<Vs>(vs)...);
+          result_storage_.template emplace<std::tuple<Tag, Datums...>>(
+              Tag{}, squiz::forward_parameter<Datums>(datums)...);
 
       old_state = state_.fetch_add(body_done_flag, std::memory_order_acq_rel);
       if (can_complete_inline(old_state)) {
         std::apply(
-            [&](set_value_t, Vs&... tuple_vs) noexcept {
-              this->get_receiver().set_value(std::forward<Vs>(tuple_vs)...);
+            [&](Tag, Datums&... tuple_datums) noexcept {
+              squiz::set_result(
+                  this->get_receiver(),
+                  sig,
+                  squiz::forward_parameter<Datums>(tuple_datums)...);
               return;
             },
             result);
       }
     } catch (...) {
-      const bool is_nothrow = (std::is_nothrow_move_constructible_v<Vs> && ...);
+      const bool is_nothrow =
+          (std::is_nothrow_move_constructible_v<Datums> && ...);
       if constexpr (!is_nothrow) {
         auto& err =
             result_storage_
-                .template emplace<std::tuple<set_error_t, std::exception_ptr>>(
-                    set_error_t{}, std::current_exception());
+                .template emplace<std::tuple<error_tag, std::exception_ptr>>(
+                    error_tag{}, std::current_exception());
 
         old_state = state_.fetch_add(body_done_flag, std::memory_order_acq_rel);
         if (can_complete_inline(old_state)) {
-          this->get_receiver().set_error(std::move(err));
+          squiz::set_error<std::exception_ptr>(
+              this->get_receiver(), std::move(std::get<1>(err)));
         }
+      } else {
+        assert(false);
+        std::unreachable();
       }
-      assert(false);
-      std::unreachable();
-    }
-  }
-
-  template <std::size_t Idx, typename E>
-    requires(Idx != 0)  //
-  void set_error(indexed_source_tag<Idx>, E&& e) noexcept {
-    state_t old_state = state_.load(std::memory_order_acquire);
-    if (can_complete_inline(old_state)) {
-      this->get_receiver().set_error(std::forward<E>(e));
-      return;
-    }
-
-    auto& result = result_storage_.template emplace<std::tuple<set_error_t, E>>(
-        set_error_t{}, std::forward<E>(e));
-
-    old_state = state_.fetch_add(body_done_flag, std::memory_order_acq_rel);
-
-    if (can_complete_inline(old_state)) {
-      this->get_receiver().set_error(std::forward<E>(std::get<1>(result)));
-    }
-  }
-
-  template <std::size_t Idx>
-    requires(Idx != 0)  //
-  void set_stopped(indexed_source_tag<Idx>) noexcept {
-    state_t old_state = state_.load(std::memory_order_acquire);
-    if (can_complete_inline(old_state)) {
-      this->get_receiver().set_stopped();
-      return;
-    }
-
-    result_storage_.template emplace<std::tuple<set_stopped_t>>(
-        set_stopped_t{});
-
-    old_state = state_.fetch_add(body_done_flag, std::memory_order_acq_rel);
-
-    if (can_complete_inline(old_state)) {
-      this->get_receiver().set_stopped();
     }
   }
 
@@ -505,9 +459,27 @@ struct let_value_sender {
       -> let_value_detail::
           let_value_completion_signatures<Source, BodyFactory, Env...>;
 
+  template <typename Self, typename... Env>
+  auto is_always_nothrow_connectable(this Self&&, Env...)
+      -> std::bool_constant<
+          (squiz::is_always_nothrow_connectable_v<
+               detail::member_type_t<Self, Source>,
+               Env...> &&
+           std::is_nothrow_constructible_v<
+               BodyFactory,
+               detail::member_type_t<Self, BodyFactory>>)>;
+
   template <typename Self, typename Receiver>
   let_value_op<detail::member_type_t<Self, Source>, BodyFactory, Receiver>
-  connect(this Self&& self, Receiver r) {
+  connect(this Self&& self, Receiver r) noexcept(
+      std::is_nothrow_constructible_v<
+          let_value_op<
+              detail::member_type_t<Self, Source>,
+              BodyFactory,
+              Receiver>,
+          detail::member_type_t<Self, Source>,
+          detail::member_type_t<Self, BodyFactory>,
+          Receiver>) {
     return let_value_op<
         detail::member_type_t<Self, Source>,
         BodyFactory,

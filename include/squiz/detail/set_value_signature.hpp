@@ -17,16 +17,16 @@ namespace squiz::detail {
 /// to set_value_t() instead of set_value_t(void).
 template <typename... ResultTypes>
 struct set_value_signature {
-  using type = set_value_t(ResultTypes...);
+  using type = value_t<ResultTypes...>;
 };
 template <typename ResultType>
-requires std::is_void_v<ResultType>
+  requires std::is_void_v<ResultType>
 struct set_value_signature<ResultType> {
-  using type = set_value_t();
+  using type = value_t<>;
 };
 
 template <typename... ResultTypes>
 using set_value_signature_t =
     typename set_value_signature<ResultTypes...>::type;
-  
+
 }  // namespace squiz::detail

@@ -13,6 +13,7 @@
 
 #include <squiz/completion_signatures.hpp>
 #include <squiz/inlinable_operation_state.hpp>
+#include <squiz/receiver.hpp>
 
 namespace squiz {
 
@@ -44,14 +45,14 @@ private:
 
     void request_stop() noexcept {
       if (loop.try_remove(this)) {
-        this->get_receiver().set_stopped();
+        squiz::set_stopped(this->get_receiver());
       }
     }
 
   private:
     static void execute_impl(task_base* task) noexcept {
       auto& self = *static_cast<schedule_op*>(task);
-      self.get_receiver().set_value();
+      squiz::set_value<>(self.get_receiver());
     }
 
     manual_event_loop& loop;
@@ -60,8 +61,8 @@ private:
   class scheduler;
 
   struct schedule_sender {
-    static auto get_completion_signatures()
-        -> completion_signatures<set_value_t(), set_stopped_t()>;
+    static auto
+    get_completion_signatures() -> completion_signatures<value_t<>, stopped_t>;
 
     static auto is_always_nothrow_connectable() -> std::true_type;
 

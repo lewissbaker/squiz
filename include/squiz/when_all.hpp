@@ -16,13 +16,14 @@
 #include <squiz/child_operation.hpp>
 #include <squiz/completion_signatures.hpp>
 #include <squiz/concepts.hpp>
-#include <squiz/detail/completion_signatures_to_variant_of_tuple.hpp>
-#include <squiz/detail/member_type.hpp>
-#include <squiz/detail/smallest_unsigned_integer.hpp>
 #include <squiz/inlinable_operation_state.hpp>
 #include <squiz/just.hpp>
 #include <squiz/overload.hpp>
+#include <squiz/receiver.hpp>
 #include <squiz/source_tag.hpp>
+#include <squiz/detail/completion_signatures_to_variant_of_tuple.hpp>
+#include <squiz/detail/member_type.hpp>
+#include <squiz/detail/smallest_unsigned_integer.hpp>
 
 namespace squiz {
 
@@ -38,6 +39,7 @@ struct when_all_op<Receiver, std::index_sequence<Ids...>, ChildSenders...>
         when_all_op<Receiver, std::index_sequence<Ids...>, ChildSenders...>,
         indexed_source_tag<Ids>,
         ChildSenders>... {
+private:
   using inlinable_base_t = inlinable_operation_state<when_all_op, Receiver>;
 
   template <std::size_t Idx>
@@ -46,6 +48,7 @@ struct when_all_op<Receiver, std::index_sequence<Ids...>, ChildSenders...>
       indexed_source_tag<Idx>,
       ChildSenders...[Idx]>;
 
+public:
   explicit when_all_op(Receiver rcvr, ChildSenders&&... children)
     : inlinable_base_t(std::move(rcvr))
     , child_base_t<Ids>(std::forward<ChildSenders>(children))... {}
@@ -76,7 +79,8 @@ struct when_all_op<Receiver, std::index_sequence<Ids...>, ChildSenders...>
   }
 
   void request_stop() noexcept
-      requires(child_base_t<Ids>::is_stoppable || ...) {
+    requires(child_base_t<Ids>::is_stoppable || ...)
+  {
     const state_t old_state =
         state_.fetch_add(stop_requested_flag, std::memory_order_relaxed);
     assert((old_state & stop_requested_flag) == 0);
@@ -89,28 +93,26 @@ struct when_all_op<Receiver, std::index_sequence<Ids...>, ChildSenders...>
   }
 
   template <std::size_t Idx, typename... Vs>
-  void set_value(indexed_source_tag<Idx>, Vs&&... vs) noexcept {
+  void set_result(
+      indexed_source_tag<Idx>,
+      value_t<Vs...>,
+      parameter_type<Vs>... vs) noexcept {
     // TODO: handle exceptions that might be thrown when copying/moving values
     std::get<Idx>(value_results_)
-        .template emplace<std::tuple<set_value_t, Vs...>>(
-            set_value_t{}, std::forward<Vs>(vs)...);
+        .template emplace<std::tuple<value_tag, Vs...>>(
+            value_tag{}, squiz::forward_parameter<Vs>(vs)...);
     arrive();
   }
 
-  template <std::size_t Idx, typename E>
-  void set_error(indexed_source_tag<Idx>, E&& e) noexcept {
+  template <std::size_t Idx, typename SignalTag, typename... Datums>
+    requires(!std::same_as<SignalTag, value_tag>)
+  void set_result(
+      indexed_source_tag<Idx>,
+      result_t<SignalTag, Datums...>,
+      parameter_type<Datums>... datums) noexcept {
     if (try_set_failure_flag()) {
-      error_or_stopped_.template emplace<std::tuple<set_error_t, E>>(
-          set_error_t{}, std::forward<E>(e));
-    }
-    arrive();
-  }
-
-  template <std::size_t Idx>
-  void set_stopped(indexed_source_tag<Idx>) noexcept {
-    if (try_set_failure_flag()) {
-      error_or_stopped_.template emplace<std::tuple<set_stopped_t>>(
-          set_stopped_t{});
+      error_or_stopped_.template emplace<std::tuple<SignalTag, Datums...>>(
+          SignalTag{}, squiz::forward_parameter<Datums>(datums)...);
     }
     arrive();
   }
@@ -167,51 +169,53 @@ private:
       std::visit(
           overload(
               [](std::monostate) noexcept { std::unreachable(); },
-              [this]<typename E>(std::tuple<set_error_t, E>&& tup) noexcept {
-                // Need an extra lambda here so that the lookup of .set_error
-                // member is dependent and deferred to second phase of 2-phase
-                // lookup as a receiver might not have a set_error() if the
-                // outer lambda is never instantiated.
-                [&]<typename R, typename E2>(R&& r, E2&& e) noexcept {
-                  r.set_error(std::forward<E2>(e));
-                }(this->get_receiver(), std::get<1>(std::move(tup)));
-              },
-              [this]<std::same_as<set_stopped_t> T>(std::tuple<T>) noexcept {
-                // Extra lambda to force 2-phase lookup of set_stopped() member.
-                [&]<typename R>(R&& r) noexcept {
-                  r.set_stopped();
-                }(this->get_receiver());
+              [this]<typename SignalTag, typename... Datums>(
+                  std::tuple<SignalTag, Datums...>& tup) noexcept {
+                std::apply(
+                    [this](SignalTag, Datums&... datums) noexcept {
+                      squiz::set_result(
+                          this->get_receiver(),
+                          squiz::result<SignalTag, Datums...>,
+                          squiz::forward_parameter<Datums>(datums)...);
+                    },
+                    tup);
               }),
-          std::move(error_or_stopped_));
+          error_or_stopped_);
     } else {
-      deliver_value(std::integral_constant<std::size_t, 0>{});
+      deliver_value(std::integral_constant<std::size_t, 0>{}, squiz::value<>);
     }
   }
 
   template <typename... Vs>
   void deliver_value(
       std::integral_constant<std::size_t, sizeof...(ChildSenders)>,
-      Vs&&... vs) noexcept {
-    this->get_receiver().set_value(std::forward<Vs>(vs)...);
+      value_t<Vs...>,
+      parameter_type<Vs>... vs) noexcept {
+    squiz::set_value<Vs...>(
+        this->get_receiver(), squiz::forward_parameter<Vs>(vs)...);
   }
 
   template <std::size_t Idx, typename... Vs>
-  void
-  deliver_value(std::integral_constant<std::size_t, Idx>, Vs&&... vs) noexcept {
+  void deliver_value(
+      std::integral_constant<std::size_t, Idx>,
+      value_t<Vs...>,
+      parameter_type<Vs>... vs) noexcept {
     std::visit(
         overload(
             [](std::monostate) noexcept { std::unreachable(); },
-            [&](auto&& new_v) {
+            [&]<typename... NewVs>(
+                std::tuple<value_tag, NewVs...>& new_v) noexcept {
               std::apply(
-                  [&](set_value_t, auto&&... new_vs) {
+                  [&](value_tag, NewVs&... new_vs) noexcept {
                     deliver_value(
                         std::integral_constant<std::size_t, Idx + 1>{},
-                        std::forward<Vs>(vs)...,
-                        static_cast<decltype(new_vs)>(new_vs)...);
+                        squiz::value<Vs..., NewVs...>,
+                        squiz::forward_parameter<Vs>(vs)...,
+                        squiz::forward_parameter<NewVs>(new_vs)...);
                   },
-                  std::move(new_v));
+                  new_v);
             }),
-        std::get<Idx>(std::move(value_results_)));
+        std::get<Idx>(value_results_));
   }
 
   using error_or_stopped_sigs_t = merge_completion_signatures_t<
@@ -250,14 +254,14 @@ struct when_all_combine_value_sigs_helper;
 
 template <typename... Args, typename... Sigs>
 struct when_all_combine_value_sigs_helper<
-    set_value_t(Args...),
+    value_t<Args...>,
     completion_signatures<Sigs...>> {
   template <typename Sig>
   struct append_sig;
 
   template <typename... Args2>
-  struct append_sig<set_value_t(Args2...)> {
-    using type = set_value_t(Args..., Args2...);
+  struct append_sig<value_t<Args2...>> {
+    using type = value_t<Args..., Args2...>;
   };
 
   using type = completion_signatures<typename append_sig<Sigs>::type...>;
@@ -305,20 +309,27 @@ struct when_all_sender {
               detail::member_type_t<Self, ChildSenders>,
               Envs...>>...>;
 
+  template <typename Self, typename... Envs>
+  auto is_always_nothrow_connectable(this Self&&, Envs...)
+      -> std::bool_constant<
+          (squiz::is_always_nothrow_connectable_v<
+               detail::member_type_t<Self, ChildSenders>> &&
+           ...)>;
+
   template <typename... ChildSenders2>
-  requires(sizeof...(ChildSenders) == sizeof...(ChildSenders2)) &&
+    requires(sizeof...(ChildSenders) == sizeof...(ChildSenders2)) &&
       ((sizeof...(ChildSenders) != 1) ||
        (!std::same_as<
            std::remove_cvref_t<ChildSenders2...[0]>,
            when_all_sender>)) &&
       (std::constructible_from<ChildSenders, ChildSenders2> && ...)
-          when_all_sender(ChildSenders2&&... cs) noexcept(
-              (std::is_nothrow_constructible_v<ChildSenders, ChildSenders2> &&
-               ...))
+  when_all_sender(ChildSenders2&&... cs) noexcept(
+      (std::is_nothrow_constructible_v<ChildSenders, ChildSenders2> && ...))
     : children(std::forward<ChildSenders2>(cs)...) {}
 
   template <typename Self, typename Receiver>
-  auto connect(this Self&& self, Receiver rcvr) {
+  auto connect(this Self&& self, Receiver rcvr) noexcept(
+      squiz::is_always_nothrow_connectable_v<Self, receiver_env_t<Receiver>>) {
     return std::apply(
         [&](auto&&... cs) {
           return when_all_op<
@@ -335,9 +346,9 @@ private:
 };
 
 template <typename... ChildSenders>
-requires(sizeof...(ChildSenders) >= 2)  //
-    auto when_all(ChildSenders&&... cs) noexcept(
-        (nothrow_decay_copyable<ChildSenders> && ...)) {
+  requires(sizeof...(ChildSenders) >= 2)  //
+auto when_all(ChildSenders&&... cs) noexcept(
+    (nothrow_decay_copyable<ChildSenders> && ...)) {
   return when_all_sender<std::remove_cvref_t<ChildSenders>...>(
       std::forward<ChildSenders>(cs)...);
 }
@@ -350,8 +361,8 @@ when_all(ChildSender&& child) noexcept(nothrow_decay_copyable<ChildSender>) {
 }
 
 /// when_all() of zero senders synchronously completes with set_value_t().
-inline just_sender<> when_all() noexcept {
-  return just_sender<>{};
+inline just_value_sender<> when_all() noexcept {
+  return just_value_sender<>{};
 }
 
 }  // namespace squiz

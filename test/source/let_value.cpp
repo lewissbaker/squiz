@@ -20,22 +20,24 @@
 
 #include <doctest/doctest.h>
 
+namespace {
+struct void_receiver {
+  bool& receiver_invoked;
+  squiz::empty_env get_env() const noexcept { return {}; }
+  void set_result(squiz::value_t<>) noexcept { receiver_invoked = true; }
+  void set_result(squiz::stopped_t) noexcept {
+    CHECK(false);
+    receiver_invoked = true;
+  }
+};
+}  // namespace
+
 TEST_CASE("let_value() simplest case") {
   auto s = squiz::let_value(
-      squiz::just_sender(), [] noexcept { return squiz::just_sender(); });
-
-  struct receiver {
-    bool& receiver_invoked;
-    squiz::empty_env get_env() const noexcept { return {}; }
-    void set_value() noexcept { receiver_invoked = true; }
-    void set_stopped() noexcept {
-      CHECK(false);
-      receiver_invoked = true;
-    }
-  };
+      squiz::just_value_sender(), [] noexcept { return squiz::just_value_sender(); });
 
   bool receiver_invoked = false;
-  auto op = std::move(s).connect(receiver{receiver_invoked});
+  auto op = std::move(s).connect(void_receiver{receiver_invoked});
   CHECK(!receiver_invoked);
   op.start();
   CHECK(receiver_invoked);
@@ -43,23 +45,13 @@ TEST_CASE("let_value() simplest case") {
 
 TEST_CASE("let_value() store a value") {
   auto s = squiz::let_value(
-      squiz::just_sender(std::string("hello")), [](std::string& s) noexcept {
+      squiz::just_value_sender(std::string("hello")), [](std::string& s) noexcept {
         CHECK(s == "hello");
-        return squiz::just_sender();
+        return squiz::just_value_sender();
       });
 
-  struct receiver {
-    bool& receiver_invoked;
-    squiz::empty_env get_env() const noexcept { return {}; }
-    void set_value() noexcept { receiver_invoked = true; }
-    void set_stopped() noexcept {
-      CHECK(false);
-      receiver_invoked = true;
-    }
-  };
-
   bool receiver_invoked = false;
-  auto op = std::move(s).connect(receiver{receiver_invoked});
+  auto op = std::move(s).connect(void_receiver{receiver_invoked});
   CHECK(!receiver_invoked);
   op.start();
   CHECK(receiver_invoked);
@@ -67,21 +59,22 @@ TEST_CASE("let_value() store a value") {
 
 TEST_CASE("let_value() store multiple values") {
   auto s = squiz::let_value(
-      squiz::just_sender(std::string("hello"), std::make_unique<int>(42)),
+      squiz::just_value_sender(std::string("hello"), std::make_unique<int>(42)),
       [](std::string& s, std::unique_ptr<int>& p) noexcept {
         CHECK(s == "hello");
         CHECK(*p == 42);
-        return squiz::just_sender(std::move(p));
+        return squiz::just_value_sender(std::move(p));
       });
 
   struct receiver {
     bool& receiver_invoked;
     squiz::empty_env get_env() const noexcept { return {}; }
-    void set_value(std::unique_ptr<int> p) noexcept {
+    void set_result(
+        squiz::value_t<std::unique_ptr<int>>, std::unique_ptr<int> p) noexcept {
       CHECK(*p == 42);
       receiver_invoked = true;
     }
-    void set_stopped() noexcept {
+    void set_result(squiz::stopped_t) noexcept {
       CHECK(false);
       receiver_invoked = true;
     }
@@ -119,11 +112,12 @@ TEST_CASE("let_value() cancellation of source") {
   struct receiver {
     bool& receiver_invoked;
     squiz::empty_env get_env() const noexcept { return {}; }
-    void set_value(std::unique_ptr<int>) noexcept {
+    void set_result(
+        squiz::value_t<std::unique_ptr<int>>, std::unique_ptr<int>) noexcept {
       CHECK(false);
       receiver_invoked = true;
     }
-    void set_stopped() noexcept { receiver_invoked = true; }
+    void set_result(squiz::stopped_t) noexcept { receiver_invoked = true; }
   };
 
   bool receiver_invoked = false;
@@ -172,11 +166,12 @@ TEST_CASE("let_value() cancellation of body") {
   struct receiver {
     bool& receiver_invoked;
     squiz::empty_env get_env() const noexcept { return {}; }
-    void set_value(std::unique_ptr<int>) noexcept {
+    void set_result(
+        squiz::value_t<std::unique_ptr<int>>, std::unique_ptr<int>) noexcept {
       CHECK(false);
       receiver_invoked = true;
     }
-    void set_stopped() noexcept { receiver_invoked = true; }
+    void set_result(squiz::stopped_t) noexcept { receiver_invoked = true; }
   };
 
   bool receiver_invoked = false;
@@ -210,8 +205,8 @@ TEST_CASE("let_value() cancellation, multiple threads") {
 
   struct receiver {
     std::binary_semaphore& sem;
-    void set_value() noexcept { sem.release(); }
-    void set_stopped() noexcept { sem.release(); }
+    void set_result(squiz::value_t<>) noexcept { sem.release(); }
+    void set_result(squiz::stopped_t) noexcept { sem.release(); }
     squiz::empty_env get_env() const noexcept { return {}; }
   };
 

@@ -16,15 +16,15 @@
 
 TEST_CASE("sync_wait just") {
   {
-    auto x = squiz::sync_wait(squiz::just_sender());
-    CHECK(std::holds_alternative<std::tuple<squiz::set_value_t>>(x));
+    auto x = squiz::sync_wait(squiz::just_value_sender());
+    CHECK(std::holds_alternative<std::tuple<squiz::value_tag>>(x));
   }
 
   {
-    auto x = squiz::sync_wait(squiz::just_sender(1, 2, 3));
-    CHECK(std::holds_alternative<std::tuple<squiz::set_value_t, int, int, int>>(
-        x));
-    auto& t = std::get<std::tuple<squiz::set_value_t, int, int, int>>(x);
+    auto x = squiz::sync_wait(squiz::just_value_sender(1, 2, 3));
+    CHECK(
+        std::holds_alternative<std::tuple<squiz::value_tag, int, int, int>>(x));
+    auto& t = std::get<std::tuple<squiz::value_tag, int, int, int>>(x);
     CHECK(std::get<1>(t) == 1);
     CHECK(std::get<2>(t) == 2);
     CHECK(std::get<3>(t) == 3);
@@ -44,9 +44,8 @@ TEST_CASE("sync_wait async operation") {
     return 42;
   }));
 
-  CHECK(std::holds_alternative<std::tuple<squiz::set_value_t, int>>(result));
-  CHECK(
-      std::get<1>(std::get<std::tuple<squiz::set_value_t, int>>(result)) == 42);
+  CHECK(std::holds_alternative<std::tuple<squiz::value_tag, int>>(result));
+  CHECK(std::get<1>(std::get<std::tuple<squiz::value_tag, int>>(result)) == 42);
 }
 
 TEST_CASE("sync_wait can drive existing manual_event_loop") {
@@ -55,14 +54,8 @@ TEST_CASE("sync_wait can drive existing manual_event_loop") {
   auto sched = loop.get_scheduler();
 
   auto result = squiz::sync_wait(
-      squiz::then_sender(
-          sched.schedule(),
-          [&] {
-            return 42;
-          }),
-      loop);
+      squiz::then_sender(sched.schedule(), [&] { return 42; }), loop);
 
-  CHECK(std::holds_alternative<std::tuple<squiz::set_value_t, int>>(result));
-  CHECK(
-      std::get<1>(std::get<std::tuple<squiz::set_value_t, int>>(result)) == 42);
+  CHECK(std::holds_alternative<std::tuple<squiz::value_tag, int>>(result));
+  CHECK(std::get<1>(std::get<std::tuple<squiz::value_tag, int>>(result)) == 42);
 }

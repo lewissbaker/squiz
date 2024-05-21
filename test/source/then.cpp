@@ -19,14 +19,14 @@ namespace {
 
 struct empty_receiver {
   static empty_receiver make_receiver(auto*) noexcept { return {}; }
-  void set_value() noexcept {}
+  void set_result(squiz::value_t<>) noexcept {}
   squiz::empty_env get_env() const noexcept { return {}; }
 };
 
 }  // namespace
 
 TEST_CASE("squiz::then_sender() can have an empty operation-state") {
-  auto s0 = squiz::just_sender();
+  auto s0 = squiz::just_value_sender();
   auto s1 = squiz::then_sender(s0, [] noexcept {});
   auto s2 = squiz::then_sender(s1, [] noexcept {});
   auto s3 = squiz::then_sender(s2, [] noexcept {});
@@ -41,7 +41,7 @@ TEST_CASE("squiz::then_sender() can have an empty operation-state") {
 TEST_CASE("squiz::then_sender - void -> void") {
   bool lambda_invoked = false;
   bool receiver_invoked = false;
-  auto s = squiz::then_sender(squiz::just_sender(), [&] noexcept {
+  auto s = squiz::then_sender(squiz::just_value_sender(), [&] noexcept {
     CHECK(!lambda_invoked);
     CHECK(!receiver_invoked);
     lambda_invoked = true;
@@ -50,7 +50,7 @@ TEST_CASE("squiz::then_sender - void -> void") {
   struct receiver {
     bool& lambda_invoked;
     bool& receiver_invoked;
-    void set_value() noexcept {
+    void set_result(squiz::value_t<>) noexcept {
       CHECK(lambda_invoked);
       CHECK(!receiver_invoked);
       receiver_invoked = true;
@@ -69,7 +69,7 @@ TEST_CASE("squiz::then_sender - void -> void") {
 TEST_CASE("squiz::then_sender - void -> int") {
   bool lambda_invoked = false;
   bool receiver_invoked = false;
-  auto s = squiz::then_sender(squiz::just_sender(), [&] noexcept {
+  auto s = squiz::then_sender(squiz::just_value_sender(), [&] noexcept {
     CHECK(!lambda_invoked);
     CHECK(!receiver_invoked);
     lambda_invoked = true;
@@ -79,7 +79,7 @@ TEST_CASE("squiz::then_sender - void -> int") {
   struct receiver {
     bool& lambda_invoked;
     bool& receiver_invoked;
-    void set_value(int x) noexcept {
+    void set_result(squiz::value_t<int>, int x) noexcept {
       CHECK(x == 101);
       CHECK(lambda_invoked);
       CHECK(!receiver_invoked);
@@ -99,8 +99,9 @@ TEST_CASE("squiz::then_sender - void -> int") {
 namespace {
 
 struct sender_of_int_or_bool {
-  static auto get_completion_signatures() -> squiz::
-      completion_signatures<squiz::set_value_t(int), squiz::set_value_t(bool)>;
+  static auto get_completion_signatures() -> squiz::completion_signatures<
+                                              squiz::value_t<int>,
+                                              squiz::value_t<bool>>;
 
   template <typename Receiver>
   struct op_state {
@@ -109,9 +110,9 @@ struct sender_of_int_or_bool {
 
     void start() noexcept {
       if (send_int) {
-        receiver.set_value(99);
+        squiz::set_value<int>(receiver, 99);
       } else {
-        receiver.set_value(false);
+        squiz::set_value<bool>(receiver, false);
       }
     }
   };
@@ -133,7 +134,7 @@ TEST_CASE("squiz::then_sender handling multiple return types") {
       squiz::then_sender(sender_of_int_or_bool(true), [](auto) noexcept {});
   static_assert(std::same_as<
                 decltype(a.get_completion_signatures()),
-                squiz::completion_signatures<squiz::set_value_t()>>);
+                squiz::completion_signatures<squiz::value_t<>>>);
 
   // Check that a lambda that collapses both types to non-void ends up with a
   // single set_value result.
@@ -141,7 +142,7 @@ TEST_CASE("squiz::then_sender handling multiple return types") {
       sender_of_int_or_bool(true), [](auto) noexcept { return 0; });
   static_assert(std::same_as<
                 decltype(b.get_completion_signatures()),
-                squiz::completion_signatures<squiz::set_value_t(int)>>);
+                squiz::completion_signatures<squiz::value_t<int>>>);
 
   // Check that a lambda that transforms both types to different results ends
   // up with two set_value results.
@@ -152,6 +153,6 @@ TEST_CASE("squiz::then_sender handling multiple return types") {
   static_assert(std::same_as<
                 decltype(c.get_completion_signatures()),
                 squiz::completion_signatures<
-                    squiz::set_value_t(std::tuple<int>),
-                    squiz::set_value_t(std::tuple<bool>)>>);
+                    squiz::value_t<std::tuple<int>>,
+                    squiz::value_t<std::tuple<bool>>>>);
 }

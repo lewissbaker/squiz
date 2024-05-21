@@ -34,6 +34,24 @@ template <typename ParentOp, typename Tag, typename Sender>
 struct child_operation {
 private:
   class child_receiver final {
+    // Define a wrapper environment type that can be returned from get_env()
+    // to avoid needing get_env() deduce its return-type from operations on
+    // the ParentOp, which will be incomplete at the point of instantiation
+    // of the child_receiver class.
+    struct env {
+      template <typename Key>
+      decltype(auto) query(Key key) const noexcept {
+        return parent_op_->get_env(Tag{}).query(key);
+      }
+
+    private:
+      friend child_receiver;
+
+      explicit env(ParentOp* p) noexcept : parent_op_(p) {}
+
+      ParentOp* parent_op_;
+    };
+
   public:
     template <typename ChildOpState>
     static child_receiver make_receiver(ChildOpState* child_op) noexcept {
@@ -43,33 +61,14 @@ private:
       return child_receiver(parent_op);
     }
 
-    template <typename... Vs>
-    void set_value(Vs&&... vs) noexcept {
-      parent_op_->set_value(Tag{}, std::forward<Vs>(vs)...);
+    template <typename Signal, typename... Datums>
+    void set_result(
+        result_t<Signal, Datums...> sig,
+        parameter_type<Datums>... datums) noexcept {
+      parent_op_->set_result(
+          Tag{}, sig, squiz::forward_parameter<Datums>(datums)...);
     }
 
-    template <typename E>
-    void set_error(E&& e) noexcept {
-      parent_op_->set_error(Tag{}, std::forward<E>(e));
-    }
-
-    void set_stopped() noexcept { parent_op_->set_stopped(Tag{}); }
-
-  private:
-    // Define a wrapper environment type that can be returned from get_env()
-    // to avoid needing get_env() deduce its return-type from operations on
-    // the ParentOp, which will be incomplete at the point of instantiation
-    // of the child_receiver class.
-    struct env {
-      ParentOp* parent_op_;
-
-      template <typename Key>
-      decltype(auto) query(Key key) const noexcept {
-        return parent_op_->get_env(Tag{}).query(key);
-      }
-    };
-
-  public:
     env get_env() const noexcept { return env{parent_op_}; }
 
   private:

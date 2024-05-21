@@ -6,47 +6,55 @@
 #pragma once
 
 #include <squiz/concepts.hpp>
+#include <squiz/parameter_type.hpp>
 
 namespace squiz {
 
 /// Tag types used as the return-type in a completion-signature to indicate what
 /// kind of signal/method this signature is.
-struct set_value_t {};
-struct set_error_t {};
-struct set_stopped_t {};
+struct value_tag {};
+struct error_tag {};
+struct stopped_tag {};
 
 template <typename T>
-concept completion_tag = one_of<T, set_value_t, set_error_t, set_stopped_t>;
+concept completion_tag = one_of<T, value_tag, error_tag, stopped_tag>;
 
-namespace detail {
-template <typename T>
-inline constexpr bool is_completion_signature = false;
+template <typename Tag, typename... Datums>
+struct result_t;
+
+///  Specialize result_t only for the combinations that are valid.
 template <typename... Vs>
-inline constexpr bool is_completion_signature<set_value_t(Vs...)> = true;
+struct result_t<value_tag, Vs...> {};
 template <typename E>
-inline constexpr bool is_completion_signature<set_error_t(E)> = true;
+struct result_t<error_tag, E> {};
 template <>
-inline constexpr bool is_completion_signature<set_stopped_t()> = true;
-}  // namespace detail
+struct result_t<stopped_tag> {};
 
-/// Concept that matches a valid completion-signature.
-///
-/// A completion-signature is a function type where the return-type is a
-/// 'completion_tag' and the parameter types are the
+template <typename... Vs>
+using value_t = result_t<value_tag, Vs...>;
+template <typename E>
+using error_t = result_t<error_tag, E>;
+using stopped_t = result_t<stopped_tag>;
+
+template <typename Tag, typename... Datums>
+inline constexpr result_t<Tag, Datums...> result{};
+template <typename... Vs>
+inline constexpr value_t<Vs...> value{};
+template <typename E>
+inline constexpr error_t<E> error{};
+inline constexpr stopped_t stopped{};
+
 template <typename T>
-concept completion_signature = detail::is_completion_signature<T>;
+concept completion_signature = instance_of<T, result_t>;
 
-/// A set of completion-signatures
-///
-/// \tparam Sigs
-/// The completion-signatures.
-/// Must not contain any duplicate signatures.
-template <completion_signature... Sigs>
+template <typename... Sigs>
 struct completion_signatures {
-  /// Apply the meta-function F to the completion-signatures.
   template <template <typename...> class F>
   using apply = F<Sigs...>;
 };
+
+template <auto... Sigs>
+using completion_signatures_t = completion_signatures<decltype(Sigs)...>;
 
 /// A meta-function for merging a list of completion_signatures types into a
 /// single completion_signatures type, taking a union of the sets of individual
@@ -74,14 +82,13 @@ struct merge_completion_signatures<SigSet> {
 
 // Case: Two completion signatures
 template <typename... As, typename B0, typename... Bs>
-requires one_of<B0, As...>
+  requires one_of<B0, As...>
 struct merge_completion_signatures<
     completion_signatures<As...>,
     completion_signatures<B0, Bs...>>
   : merge_completion_signatures<
         completion_signatures<As...>,
-        completion_signatures<Bs...>> {
-};
+        completion_signatures<Bs...>> {};
 
 template <typename... As, typename B0, typename... Bs>
 struct merge_completion_signatures<
@@ -118,8 +125,7 @@ struct merge_completion_signatures<A, B, C, Rest...>
 /// matching completion-signatures and computing an output set of signatures
 /// for each case.
 template <completion_signature Sig, typename Transform>
-using transform_completion_signature_t =
-    decltype(Transform::apply(static_cast<Sig*>(nullptr)));
+using transform_completion_signature_t = decltype(Transform::apply(Sig{}));
 
 /// Meta-function for applying a Transform to every element in a set of
 /// completion-signatures and then taking the union of the resulting sets of
@@ -143,29 +149,30 @@ namespace detail {
 template <typename... Tags>
 struct only_tags {
   template <typename Tag, typename... Args>
-  requires one_of<Tag, Tags...>
-  static auto apply(Tag (*)(Args...)) -> completion_signatures<Tag(Args...)>;
+    requires one_of<Tag, Tags...>
+  static auto apply(result_t<Tag, Args...>)
+      -> completion_signatures<result_t<Tag, Args...>>;
 
   template <typename Tag, typename... Args>
-  static auto apply(Tag (*)(Args...)) -> completion_signatures<>;
+  static auto apply(result_t<Tag, Args...>) -> completion_signatures<>;
 };
 }  // namespace detail
 
 template <typename Sigs>
 using value_signatures_t =
-    transform_completion_signatures_t<Sigs, detail::only_tags<set_value_t>>;
+    transform_completion_signatures_t<Sigs, detail::only_tags<value_tag>>;
 
 template <typename Sigs>
 using error_signatures_t =
-    transform_completion_signatures_t<Sigs, detail::only_tags<set_error_t>>;
+    transform_completion_signatures_t<Sigs, detail::only_tags<error_tag>>;
 
 template <typename Sigs>
 using stopped_signatures_t =
-    transform_completion_signatures_t<Sigs, detail::only_tags<set_stopped_t>>;
+    transform_completion_signatures_t<Sigs, detail::only_tags<stopped_tag>>;
 
 template <typename Sigs>
 using error_or_stopped_signatures_t = transform_completion_signatures_t<
     Sigs,
-    detail::only_tags<set_error_t, set_stopped_t>>;
+    detail::only_tags<error_tag, stopped_tag>>;
 
 }  // namespace squiz

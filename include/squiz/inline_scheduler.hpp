@@ -7,6 +7,7 @@
 
 #include <squiz/completion_signatures.hpp>
 #include <squiz/inlinable_operation_state.hpp>
+#include <squiz/receiver.hpp>
 
 namespace squiz {
 
@@ -21,12 +22,12 @@ class inline_scheduler {
   public:
     explicit schedule_op(Receiver r) noexcept : inlinable_base(std::move(r)) {}
 
-    void start() noexcept { this->get_receiver().set_value(); }
+    void start() noexcept { squiz::set_value<>(this->get_receiver()); }
   };
 
   struct schedule_sender {
-    static auto get_completion_signatures()
-        -> completion_signatures<set_value_t()>;
+    static auto get_completion_signatures() -> completion_signatures<value_t<>>;
+    static auto is_always_nothrow_connectable() -> std::true_type;
 
     template <typename Receiver>
     static schedule_op<Receiver> connect(Receiver r) noexcept {

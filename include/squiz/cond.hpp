@@ -80,19 +80,13 @@ public:
     }
   }
 
-  template <std::size_t Idx, typename... Vs>
-  void set_value(indexed_source_tag<Idx>, Vs&&... vs) noexcept {
-    this->get_receiver().set_value(std::forward<Vs>(vs)...);
-  }
-
-  template <std::size_t Idx, typename E>
-  void set_error(indexed_source_tag<Idx>, E&& e) noexcept {
-    this->get_receiver().set_error(std::forward<E>(e));
-  }
-
-  template <std::size_t Idx>
-  void set_stopped(indexed_source_tag<Idx>) noexcept {
-    this->get_receiver().set_stopped();
+  template <std::size_t Idx, typename SignalTag, typename... Datums>
+  void set_result(
+      indexed_source_tag<Idx>,
+      result_t<SignalTag, Datums...> sig,
+      parameter_type<Datums>... datums) noexcept {
+    squiz::set_result(
+        this->get_receiver(), sig, squiz::forward_parameter<Datums>(datums)...);
   }
 
   template <std::size_t Idx>

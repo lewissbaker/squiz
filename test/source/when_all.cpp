@@ -19,11 +19,11 @@ TEST_CASE("when_all() of no arguments") {
   auto s = squiz::when_all();
   static_assert(std::same_as<
                 decltype(s.get_completion_signatures()),
-                squiz::completion_signatures<squiz::set_value_t()>>);
+                squiz::completion_signatures<squiz::value_t<>>>);
 
   struct receiver {
     bool& receiver_invoked;
-    void set_value() noexcept { receiver_invoked = true; }
+    void set_result(squiz::value_t<>) noexcept { receiver_invoked = true; }
     squiz::empty_env get_env() const noexcept { return {}; }
   };
 
@@ -37,15 +37,15 @@ TEST_CASE("when_all() of no arguments") {
 }
 
 TEST_CASE("when_all() of 1 sender") {
-  auto s = squiz::when_all(squiz::just_sender(1, 2, 3));
-  static_assert(
-      std::same_as<
-          decltype(s.get_completion_signatures()),
-          squiz::completion_signatures<squiz::set_value_t(int, int, int)>>);
+  auto s = squiz::when_all(squiz::just_value_sender(1, 2, 3));
+  static_assert(std::same_as<
+                decltype(s.get_completion_signatures()),
+                squiz::completion_signatures<squiz::value_t<int, int, int>>>);
 
   struct receiver {
     bool& receiver_invoked;
-    void set_value(int a, int b, int c) noexcept {
+    void
+    set_result(squiz::value_t<int, int, int>, int a, int b, int c) noexcept {
       CHECK(a == 1);
       CHECK(b == 2);
       CHECK(c == 3);
@@ -65,15 +65,20 @@ TEST_CASE("when_all() of 1 sender") {
 
 TEST_CASE("when_all() of 2 senders") {
   auto s = squiz::when_all(
-      squiz::just_sender(1, 2), squiz::just_sender(std::string("hello")));
-  static_assert(std::same_as<
-                decltype(std::move(s).get_completion_signatures()),
-                squiz::completion_signatures<squiz::set_value_t(
-                    int, int, std::string)>>);
+      squiz::just_value_sender(1, 2),
+      squiz::just_value_sender(std::string("hello")));
+  static_assert(
+      std::same_as<
+          decltype(std::move(s).get_completion_signatures()),
+          squiz::completion_signatures<squiz::value_t<int, int, std::string>>>);
 
   struct receiver {
     bool& receiver_invoked;
-    void set_value(int a, int b, std::string&& c) noexcept {
+    void set_result(
+        squiz::value_t<int, int, std::string>,
+        int a,
+        int b,
+        std::string&& c) noexcept {
       CHECK(a == 1);
       CHECK(b == 2);
       CHECK(c == "hello");
@@ -94,23 +99,40 @@ TEST_CASE("when_all() of 2 senders") {
 TEST_CASE("when_all() of 2 senders with multiple value-completions") {
   auto make_sender = [](bool a, bool b) {
     return squiz::when_all(
-        squiz::cond(a, squiz::just_sender(1), squiz::just_sender(2, 3)),
-        squiz::cond(b, squiz::just_sender(4), squiz::just_sender(5, 6, 7)));
+        squiz::cond(
+            a, squiz::just_value_sender(1), squiz::just_value_sender(2, 3)),
+        squiz::cond(
+            b, squiz::just_value_sender(4), squiz::just_value_sender(5, 6, 7)));
   };
 
   struct receiver_base {
     bool& receiver_invoked;
-    void set_value(int, int) noexcept { CHECK(false); }
-    void set_value(int, int, int, int) noexcept { CHECK(false); }
-    void set_value(int, int, int) noexcept { CHECK(false); }
-    void set_value(int, int, int, int, int) noexcept { CHECK(false); }
+    void set_result(squiz::value_t<int, int>, int, int) noexcept {
+      CHECK(false);
+    }
+    void set_result(
+        squiz::value_t<int, int, int, int>, int, int, int, int) noexcept {
+      CHECK(false);
+    }
+    void set_result(squiz::value_t<int, int, int>, int, int, int) noexcept {
+      CHECK(false);
+    }
+    void set_result(
+        squiz::value_t<int, int, int, int, int>,
+        int,
+        int,
+        int,
+        int,
+        int) noexcept {
+      CHECK(false);
+    }
     squiz::empty_env get_env() const noexcept { return {}; }
   };
 
   {
     struct receiver : receiver_base {
-      using receiver_base::set_value;
-      void set_value(int a, int b) noexcept {
+      using receiver_base::set_result;
+      void set_result(squiz::value_t<int, int>, int a, int b) noexcept {
         CHECK(a == 1);
         CHECK(b == 4);
         receiver_invoked = true;
@@ -125,8 +147,9 @@ TEST_CASE("when_all() of 2 senders with multiple value-completions") {
 
   {
     struct receiver : receiver_base {
-      using receiver_base::set_value;
-      void set_value(int a, int b, int c) noexcept {
+      using receiver_base::set_result;
+      void
+      set_result(squiz::value_t<int, int, int>, int a, int b, int c) noexcept {
         CHECK(a == 2);
         CHECK(b == 3);
         CHECK(c == 4);
@@ -142,8 +165,14 @@ TEST_CASE("when_all() of 2 senders with multiple value-completions") {
 
   {
     struct receiver : receiver_base {
-      using receiver_base::set_value;
-      void set_value(int a, int b, int c, int d, int e) noexcept {
+      using receiver_base::set_result;
+      void set_result(
+          squiz::value_t<int, int, int, int, int>,
+          int a,
+          int b,
+          int c,
+          int d,
+          int e) noexcept {
         CHECK(a == 2);
         CHECK(b == 3);
         CHECK(c == 5);

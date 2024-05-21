@@ -12,10 +12,11 @@
 #include <utility>
 
 #include <squiz/completion_signatures.hpp>
-#include <squiz/detail/completion_signatures_to_variant_of_tuple.hpp>
 #include <squiz/empty_env.hpp>
 #include <squiz/manual_event_loop.hpp>
+#include <squiz/receiver.hpp>
 #include <squiz/sender.hpp>
+#include <squiz/detail/completion_signatures_to_variant_of_tuple.hpp>
 
 namespace squiz {
 
@@ -27,30 +28,19 @@ private:
   struct receiver {
     sync_wait_state& state;
 
-    template <typename... Vs>
-    void set_value(Vs&&... vs) noexcept {
+    template <typename Tag, typename... Datums>
+    void set_result(
+        result_t<Tag, Datums...>, parameter_type<Datums>... datums) noexcept {
       try {
-        state.result.template emplace<std::tuple<set_value_t, Vs...>>(
-            set_value_t(), std::forward<Vs>(vs)...);
+        state.result.template emplace<std::tuple<Tag, Datums...>>(
+            Tag{}, squiz::forward_parameter<Datums>(datums)...);
       } catch (...) {
-        if constexpr (!(std::is_nothrow_move_constructible_v<Vs> && ...)) {
+        if constexpr (!(std::is_nothrow_move_constructible_v<Datums> && ...)) {
           state->result
-              .template emplace<std::tuple<set_error_t, std::exception_ptr>>(
-                  set_error_t(), std::current_exception());
+              .template emplace<std::tuple<error_tag, std::exception_ptr>>(
+                  error_tag{}, std::current_exception());
         }
       }
-      state.ss.request_stop();
-    }
-
-    template <typename E>
-    void set_error(E&& e) noexcept {
-      state.result.template emplace<std::tuple<set_error_t, E>>(
-          set_error_t(), std::forward<E>(e));
-      state.ss.request_stop();
-    }
-
-    void set_stopped() noexcept {
-      state.result.template emplace<std::tuple<set_stopped_t>>(set_stopped_t());
       state.ss.request_stop();
     }
 
@@ -60,18 +50,36 @@ private:
 public:
   receiver get_receiver() noexcept { return receiver{*this}; }
 
-  Result result;
+  [[no_unique_address]] Result result;
+
+  // TODO: Replace with inplace_stop_source
   std::stop_source ss;
-  Env env;
+  [[no_unique_address]] Env env;
 };
+
+struct transform_results {
+  template <typename Tag, typename... Datums>
+    requires(std::is_nothrow_move_constructible_v<Datums> && ...)
+  static auto apply(result_t<Tag, Datums...>)
+      -> completion_signatures<result_t<Tag, Datums...>>;
+
+  template <typename Tag, typename... Datums>
+  static auto apply(result_t<Tag, Datums...>) -> completion_signatures<
+                                                  result_t<Tag, Datums...>,
+                                                  error_t<std::exception_ptr>>;
+};
+
+template <typename Src, typename Env>
+using result_variant_t = detail::completion_signatures_to_variant_of_tuple_t<
+    transform_completion_signatures_t<
+        completion_signatures_for_t<Src, Env>,
+        transform_results>>;
 
 }  // namespace sync_wait_detail
 
 template <typename Src>
 inline auto sync_wait(Src&& src, manual_event_loop& loop) {
-  using result_t = detail::completion_signatures_to_variant_of_tuple_t<
-      completion_signatures_for_t<Src, empty_env>>;
-
+  using result_t = sync_wait_detail::result_variant_t<Src, empty_env>;
   sync_wait_detail::sync_wait_state<result_t, empty_env> state;
   auto op = std::forward<Src>(src).connect(state.get_receiver());
   op.start();
