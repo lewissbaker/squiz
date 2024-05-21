@@ -13,6 +13,12 @@ This implementation explores the following ideas:
   `connect()` during their execution, from unconditionally including `set_error_t(std::exception_ptr)`
   in their completion-signatures, just in case the call to `connect()` on the body-sender is not
   `noexcept`, which in general can't be determined until we have a receiver.
+- The ability to query whether or not an operation is stoppable using the `stoppable_operation_state`
+  concept as well as querying whether or not the caller is potentially going to send a stop-request
+  or whether it will never send a stop-request.
+  This can allow for more efficient algorithm implementations if we can determine if there
+  is no point doing extra work to try to stop a child operation or doing extra work to
+  handle a stop-request that will never arrive.
 
 Note that this library makes use of C++26 features such as pack-indexing and as such
 requires a very recent compiler. e.g. Clang-19 or later.
