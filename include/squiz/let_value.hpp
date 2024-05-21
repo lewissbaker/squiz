@@ -16,6 +16,7 @@
 #include <squiz/receiver.hpp>
 #include <squiz/source_tag.hpp>
 #include <squiz/variant_child_operation.hpp>
+#include <squiz/detail/add_error_if_move_can_throw.hpp>
 #include <squiz/detail/completion_signatures_to_variant_of_tuple.hpp>
 #include <squiz/detail/dispatch_index.hpp>
 #include <squiz/detail/member_type.hpp>
@@ -51,6 +52,7 @@ struct make_let_value_variant_child_operation {
   template <typename... Sigs>
   using apply = variant_child_operation<
       let_value_op<Source, BodyFactory, Receiver>,
+      receiver_env_t<Receiver>,
       indexed_source_tag,
       Source,
       let_value_transform_t<Sigs, BodyFactory>...>;
@@ -94,11 +96,9 @@ private:
 
   template <typename... Vs>
   using body_completion_sigs_t = merge_completion_signatures_t<
-      transform_completion_signatures_t<
-          completion_signatures_for_t<
-              std::invoke_result_t<BodyFactory, Vs&...>,
-              Env...>,
-          transform_body_signatures>,
+      detail::add_error_if_move_can_throw_t<completion_signatures_for_t<
+          std::invoke_result_t<BodyFactory, Vs&...>,
+          Env...>>,
       std::conditional_t<
           is_body_sender_nothrow_startable<Vs...>,
           completion_signatures<>,

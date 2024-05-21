@@ -5,6 +5,12 @@
 ///////////////////////////////////////////////////////////////////////////////
 #pragma once
 
+#include <squiz/queryable.hpp>
+
 namespace squiz {
-struct empty_env {};
+
+struct empty_env {
+  using property_keys = key_list<>;
+};
+
 }  // namespace squiz

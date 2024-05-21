@@ -21,11 +21,69 @@
 #include <squiz/overload.hpp>
 #include <squiz/receiver.hpp>
 #include <squiz/source_tag.hpp>
+#include <squiz/detail/add_error_if_move_can_throw.hpp>
 #include <squiz/detail/completion_signatures_to_variant_of_tuple.hpp>
+#include <squiz/detail/env_with_stop_possible.hpp>
 #include <squiz/detail/member_type.hpp>
 #include <squiz/detail/smallest_unsigned_integer.hpp>
 
 namespace squiz {
+
+namespace when_all_detail {
+
+template <typename ValueSig, typename SigSet>
+struct when_all_combine_value_sigs_helper;
+
+template <typename... Args, typename... Sigs>
+struct when_all_combine_value_sigs_helper<
+    value_t<Args...>,
+    completion_signatures<Sigs...>> {
+  template <typename Sig>
+  struct append_sig;
+
+  template <typename... Args2>
+  struct append_sig<value_t<Args2...>> {
+    using type = value_t<Args..., Args2...>;
+  };
+
+  using type = completion_signatures<typename append_sig<Sigs>::type...>;
+};
+
+template <typename... SigSets>
+struct when_all_combine_value_sigs;
+
+template <>
+struct when_all_combine_value_sigs<> {
+  using type = completion_signatures<>;
+};
+
+template <typename SigSet>
+struct when_all_combine_value_sigs<SigSet> {
+  using type = SigSet;
+};
+
+template <typename... Sigs1, typename Sig2, typename... Rest>
+struct when_all_combine_value_sigs<
+    completion_signatures<Sigs1...>,
+    Sig2,
+    Rest...>
+  : when_all_combine_value_sigs<
+        merge_completion_signatures_t<
+            typename when_all_combine_value_sigs_helper<Sigs1, Sig2>::type...>,
+        Rest...> {};
+
+template <typename... SigSets>
+using when_all_combine_value_sigs_t =
+    typename when_all_combine_value_sigs<SigSets...>::type;
+
+// Checks whether a when_all() algorithm with the specified ChildSenders
+// will always succeed with a value-result.
+template <typename ChildSender, typename... Env>
+concept when_all_child_always_succeeds =
+    (error_or_stopped_signatures_t<detail::add_error_if_move_can_throw_t<
+         completion_signatures_for_t<ChildSender, Env...>>>::size == 0);
+
+}  // namespace when_all_detail
 
 template <typename Receiver, typename Ids, typename... ChildSenders>
 struct when_all_op;
@@ -37,6 +95,7 @@ struct when_all_op<Receiver, std::index_sequence<Ids...>, ChildSenders...>
         Receiver>
   , child_operation<
         when_all_op<Receiver, std::index_sequence<Ids...>, ChildSenders...>,
+        receiver_env_t<Receiver>,
         indexed_source_tag<Ids>,
         ChildSenders>... {
 private:
@@ -45,6 +104,7 @@ private:
   template <std::size_t Idx>
   using child_base_t = child_operation<
       when_all_op,
+      receiver_env_t<Receiver>,
       indexed_source_tag<Idx>,
       ChildSenders...[Idx]>;
 
@@ -79,7 +139,8 @@ public:
   }
 
   void request_stop() noexcept
-    requires(child_base_t<Ids>::is_stoppable || ...)
+    requires is_stop_possible_v<receiver_env_t<Receiver>> &&
+      (child_base_t<Ids>::is_stoppable || ...)
   {
     const state_t old_state =
         state_.fetch_add(stop_requested_flag, std::memory_order_relaxed);
@@ -97,10 +158,24 @@ public:
       indexed_source_tag<Idx>,
       value_t<Vs...>,
       parameter_type<Vs>... vs) noexcept {
-    // TODO: handle exceptions that might be thrown when copying/moving values
-    std::get<Idx>(value_results_)
-        .template emplace<std::tuple<value_tag, Vs...>>(
-            value_tag{}, squiz::forward_parameter<Vs>(vs)...);
+    try {
+      std::get<Idx>(value_results_)
+          .template emplace<std::tuple<value_tag, Vs...>>(
+              value_tag{}, squiz::forward_parameter<Vs>(vs)...);
+    } catch (...) {
+      constexpr bool is_nothrow =
+          (std::is_nothrow_move_constructible_v<Vs> && ...);
+      if constexpr (!is_nothrow) {
+        if (try_set_failure_flag()) {
+          error_or_stopped_
+              .template emplace<std::tuple<error_tag, std::exception_ptr>>(
+                  error_tag{}, std::current_exception());
+        }
+      } else {
+        assert(false);
+        std::unreachable();
+      }
+    }
     arrive();
   }
 
@@ -111,15 +186,29 @@ public:
       result_t<SignalTag, Datums...>,
       parameter_type<Datums>... datums) noexcept {
     if (try_set_failure_flag()) {
-      error_or_stopped_.template emplace<std::tuple<SignalTag, Datums...>>(
-          SignalTag{}, squiz::forward_parameter<Datums>(datums)...);
+      try {
+        error_or_stopped_.template emplace<std::tuple<SignalTag, Datums...>>(
+            SignalTag{}, squiz::forward_parameter<Datums>(datums)...);
+      } catch (...) {
+        constexpr bool is_nothrow =
+            (std::is_nothrow_move_constructible_v<Datums> && ...);
+        if constexpr (!is_nothrow) {
+          error_or_stopped_
+              .template emplace<std::tuple<error_tag, std::exception_ptr>>(
+                  error_tag{}, std::current_exception());
+        } else {
+          assert(false);
+          std::unreachable();
+        }
+      }
     }
     arrive();
   }
 
   template <std::size_t Idx>
-  decltype(auto) get_env(indexed_source_tag<Idx>) noexcept {
-    return this->get_receiver().get_env();
+  detail::env_with_stop_possible<receiver_env_t<Receiver>>
+  get_env(indexed_source_tag<Idx>) noexcept {
+    return detail::env_with_stop_possible{this->get_receiver().get_env()};
   }
 
 private:
@@ -218,10 +307,11 @@ private:
         std::get<Idx>(value_results_));
   }
 
-  using error_or_stopped_sigs_t = merge_completion_signatures_t<
-      error_or_stopped_signatures_t<completion_signatures_for_t<
-          ChildSenders,
-          receiver_env_t<Receiver>>>...>;
+  using error_or_stopped_sigs_t =
+      merge_completion_signatures_t<error_or_stopped_signatures_t<
+          detail::add_error_if_move_can_throw_t<completion_signatures_for_t<
+              ChildSenders,
+              receiver_env_t<Receiver>>>>...>;
 
   using error_or_stopped_result_t =
       detail::completion_signatures_to_variant_of_tuple_t<
@@ -247,73 +337,156 @@ private:
   [[no_unique_address]] value_results_t value_results_;
 };
 
-namespace when_all_detail {
+/// Specialization for the case where none of the child operations can
+/// fail with either stopped or error and thus we can use a more efficient
+/// implementation that:
+/// - Doesn't need to store an error or stopped result - only value results.
+/// - Doesn't need to worry about modifying the environment to ensure that
+///   the child operation has a request_stop() if supported, even if the
+///   parent environment doesn't indicate a desire to send a stop-request.
+template <typename Receiver, std::size_t... Ids, typename... ChildSenders>
+  requires(when_all_detail::when_all_child_always_succeeds<
+               ChildSenders,
+               receiver_env_t<Receiver>> &&
+           ...)
+struct when_all_op<Receiver, std::index_sequence<Ids...>, ChildSenders...>
+  : public inlinable_operation_state<
+        when_all_op<Receiver, std::index_sequence<Ids...>, ChildSenders...>,
+        Receiver>
+  , public child_operation<
+        when_all_op<Receiver, std::index_sequence<Ids...>, ChildSenders...>,
+        receiver_env_t<Receiver>,
+        indexed_source_tag<Ids>,
+        ChildSenders>... {
+  using inlinable_base_t = inlinable_operation_state<when_all_op, Receiver>;
+  template <std::size_t Idx>
+  using child_base_t = child_operation<
+      when_all_op,
+      receiver_env_t<Receiver>,
+      indexed_source_tag<Idx>,
+      ChildSenders...[Idx]>;
 
-template <typename ValueSig, typename SigSet>
-struct when_all_combine_value_sigs_helper;
+public:
+  explicit when_all_op(Receiver rcvr, ChildSenders&&... children)
+    : inlinable_base_t(std::move(rcvr))
+    , child_base_t<Ids>(std::forward<ChildSenders>(children))... {}
 
-template <typename... Args, typename... Sigs>
-struct when_all_combine_value_sigs_helper<
-    value_t<Args...>,
-    completion_signatures<Sigs...>> {
-  template <typename Sig>
-  struct append_sig;
+  void start() noexcept {
+    // Start child operations
+    (child_base_t<Ids>::start(), ...);
+  }
 
-  template <typename... Args2>
-  struct append_sig<value_t<Args2...>> {
-    using type = value_t<Args..., Args2...>;
-  };
+  void request_stop() noexcept
+    requires is_stop_possible_v<receiver_env_t<Receiver>> &&
+      (child_base_t<Ids>::is_stoppable || ...)
+  {
+    (child_base_t<Ids>::request_stop(), ...);
+  }
 
-  using type = completion_signatures<typename append_sig<Sigs>::type...>;
+  template <std::size_t Idx, typename... Vs>
+  void set_result(
+      indexed_source_tag<Idx>,
+      value_t<Vs...>,
+      parameter_type<Vs>... vs) noexcept {
+    std::get<Idx>(value_results_)
+        .template emplace<std::tuple<value_tag, Vs...>>(
+            value_tag{}, squiz::forward_parameter<Vs>(vs)...);
+    arrive();
+  }
+
+private:
+  void arrive() noexcept {
+    if (state_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+      deliver_value(std::integral_constant<std::size_t, 0>{}, squiz::value<>);
+    }
+  }
+
+  template <typename... Vs>
+  void deliver_value(
+      std::integral_constant<std::size_t, sizeof...(ChildSenders)>,
+      value_t<Vs...>,
+      parameter_type<Vs>... vs) noexcept {
+    squiz::set_value<Vs...>(
+        this->get_receiver(), squiz::forward_parameter<Vs>(vs)...);
+  }
+
+  template <std::size_t Idx, typename... Vs>
+  void deliver_value(
+      std::integral_constant<std::size_t, Idx>,
+      value_t<Vs...>,
+      parameter_type<Vs>... vs) noexcept {
+    std::visit(
+        overload(
+            [](std::monostate) noexcept { std::unreachable(); },
+            [&]<typename... NewVs>(
+                std::tuple<value_tag, NewVs...>& new_v) noexcept {
+              std::apply(
+                  [&](value_tag, NewVs&... new_vs) noexcept {
+                    deliver_value(
+                        std::integral_constant<std::size_t, Idx + 1>{},
+                        squiz::value<Vs..., NewVs...>,
+                        squiz::forward_parameter<Vs>(vs)...,
+                        squiz::forward_parameter<NewVs>(new_vs)...);
+                  },
+                  new_v);
+            }),
+        std::get<Idx>(value_results_));
+  }
+
+  using value_results_t =
+      std::tuple<detail::completion_signatures_to_variant_of_tuple_t<
+          value_signatures_t<completion_signatures_for_t<
+              ChildSenders,
+              receiver_env_t<Receiver>>>>...>;
+
+  using ref_count_t =
+      detail::smallest_unsigned_integer_for<sizeof...(ChildSenders)>;
+  std::atomic<ref_count_t> state_{sizeof...(ChildSenders)};
+  [[no_unique_address]] value_results_t value_results_;
 };
-
-template <typename... SigSets>
-struct when_all_combine_value_sigs;
-
-template <>
-struct when_all_combine_value_sigs<> {
-  using type = completion_signatures<>;
-};
-
-template <typename SigSet>
-struct when_all_combine_value_sigs<SigSet> {
-  using type = SigSet;
-};
-
-template <typename... Sigs1, typename Sig2, typename... Rest>
-struct when_all_combine_value_sigs<
-    completion_signatures<Sigs1...>,
-    Sig2,
-    Rest...>
-  : when_all_combine_value_sigs<
-        merge_completion_signatures_t<
-            typename when_all_combine_value_sigs_helper<Sigs1, Sig2>::type...>,
-        Rest...> {};
-
-template <typename... SigSets>
-using when_all_combine_value_sigs_t =
-    typename when_all_combine_value_sigs<SigSets...>::type;
-
-}  // namespace when_all_detail
 
 template <typename... ChildSenders>
 struct when_all_sender {
-  template <typename Self, typename... Envs>
-  auto get_completion_signatures(this Self&&, Envs...)
+  template <typename Self, typename... Env>
+    requires(when_all_detail::when_all_child_always_succeeds<
+                 detail::member_type_t<Self, ChildSenders>,
+                 Env...> &&
+             ...)
+  auto get_completion_signatures(this Self&&, Env...)
+      -> when_all_detail::when_all_combine_value_sigs_t<
+          value_signatures_t<completion_signatures_for_t<
+              detail::member_type_t<Self, ChildSenders>,
+              Env...>>...>;
+
+  template <typename Self, typename... Env>
+  auto get_completion_signatures(this Self&&, Env...)
       -> merge_completion_signatures_t<
           when_all_detail::when_all_combine_value_sigs_t<
               value_signatures_t<completion_signatures_for_t<
                   detail::member_type_t<Self, ChildSenders>,
-                  Envs...>>...>,
+                  detail::env_with_stop_possible<Env>...>>...>,
           error_or_stopped_signatures_t<completion_signatures_for_t<
               detail::member_type_t<Self, ChildSenders>,
-              Envs...>>...>;
+              detail::env_with_stop_possible<Env>...>>...>;
 
-  template <typename Self, typename... Envs>
-  auto is_always_nothrow_connectable(this Self&&, Envs...)
+  template <typename Self, typename... Env>
+    requires(when_all_detail::when_all_child_always_succeeds<
+                 detail::member_type_t<Self, ChildSenders>,
+                 Env...> &&
+             ...)
+  auto is_always_nothrow_connectable(this Self&&, Env...)
       -> std::bool_constant<
           (squiz::is_always_nothrow_connectable_v<
-               detail::member_type_t<Self, ChildSenders>> &&
+               detail::member_type_t<Self, ChildSenders>,
+               Env...> &&
+           ...)>;
+
+  template <typename Self, typename... Env>
+  auto is_always_nothrow_connectable(this Self&&, Env...)
+      -> std::bool_constant<
+          (squiz::is_always_nothrow_connectable_v<
+               detail::member_type_t<Self, ChildSenders>,
+               detail::env_with_stop_possible<Env>...> &&
            ...)>;
 
   template <typename... ChildSenders2>

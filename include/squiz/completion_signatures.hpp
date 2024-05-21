@@ -51,6 +51,8 @@ template <typename... Sigs>
 struct completion_signatures {
   template <template <typename...> class F>
   using apply = F<Sigs...>;
+
+  static constexpr std::size_t size = sizeof...(Sigs);
 };
 
 template <auto... Sigs>

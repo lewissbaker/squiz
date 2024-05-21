@@ -24,6 +24,7 @@ struct cond_op final
         Receiver>
   , variant_child_operation<
         cond_op<TrueSource, FalseSource, Receiver>,
+        receiver_env_t<Receiver>,
         indexed_source_tag,
         TrueSource,
         FalseSource> {
@@ -31,6 +32,7 @@ private:
   using inlinable_base = inlinable_operation_state<cond_op, Receiver>;
   using variant_base = variant_child_operation<
       cond_op,
+      receiver_env_t<Receiver>,
       indexed_source_tag,
       TrueSource,
       FalseSource>;

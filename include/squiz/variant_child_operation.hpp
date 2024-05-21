@@ -51,6 +51,7 @@ namespace squiz {
 /// constructed at a time.
 template <
     typename ParentOp,
+    typename Env,
     template <std::size_t>
     class Tag,
     typename... Senders>
@@ -78,7 +79,7 @@ class variant_child_operation {
           tag_t{}, sig, squiz::forward_parameter<Datums>(datums)...);
     }
 
-    auto get_env() const noexcept { return parent_op_->get_env(tag_t{}); }
+    Env get_env() const noexcept { return parent_op_->get_env(tag_t{}); }
 
   private:
     friend variant_child_operation;

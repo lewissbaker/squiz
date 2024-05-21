@@ -30,28 +30,10 @@ namespace squiz {
 ///   // ...
 /// };
 /// \endcode
-template <typename ParentOp, typename Tag, typename Sender>
+template <typename ParentOp, typename Env, typename Tag, typename Sender>
 struct child_operation {
 private:
   class child_receiver final {
-    // Define a wrapper environment type that can be returned from get_env()
-    // to avoid needing get_env() deduce its return-type from operations on
-    // the ParentOp, which will be incomplete at the point of instantiation
-    // of the child_receiver class.
-    struct env {
-      template <typename Key>
-      decltype(auto) query(Key key) const noexcept {
-        return parent_op_->get_env(Tag{}).query(key);
-      }
-
-    private:
-      friend child_receiver;
-
-      explicit env(ParentOp* p) noexcept : parent_op_(p) {}
-
-      ParentOp* parent_op_;
-    };
-
   public:
     template <typename ChildOpState>
     static child_receiver make_receiver(ChildOpState* child_op) noexcept {
@@ -69,7 +51,7 @@ private:
           Tag{}, sig, squiz::forward_parameter<Datums>(datums)...);
     }
 
-    env get_env() const noexcept { return env{parent_op_}; }
+    Env get_env() const noexcept { return parent_op_->get_env(Tag{}); }
 
   private:
     friend child_operation;

@@ -65,10 +65,13 @@ TEST_CASE("manual_event_loop run task in other thread") {
 TEST_CASE("manual_event_loop request_stop before executed") {
   squiz::manual_event_loop loop;
 
+  using stoppable_env = squiz::detail::env_with_stop_possible<squiz::empty_env>;
+
   struct receiver {
     bool& receiver_invoked;
     void set_result(squiz::value_t<>) noexcept { CHECK(false); }
     void set_result(squiz::stopped_t) noexcept { receiver_invoked = true; }
+    stoppable_env get_env() const noexcept { return {}; }
   };
 
   {

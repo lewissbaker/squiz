@@ -14,6 +14,7 @@
 #include <squiz/completion_signatures.hpp>
 #include <squiz/inlinable_operation_state.hpp>
 #include <squiz/receiver.hpp>
+#include <squiz/stop_possible.hpp>
 
 namespace squiz {
 
@@ -43,7 +44,9 @@ private:
 
     void start() noexcept { loop.enqueue(this); }
 
-    void request_stop() noexcept {
+    void request_stop() noexcept
+      requires is_stop_possible_v<receiver_env_t<Receiver>>
+    {
       if (loop.try_remove(this)) {
         squiz::set_stopped(this->get_receiver());
       }
@@ -61,8 +64,14 @@ private:
   class scheduler;
 
   struct schedule_sender {
+    template <typename Env>
+      requires is_stop_possible_v<Env>
+    static auto get_completion_signatures(Env)
+        -> completion_signatures<value_t<>, stopped_t>;
+
+    template <typename Env>
     static auto
-    get_completion_signatures() -> completion_signatures<value_t<>, stopped_t>;
+        get_completion_signatures(Env) -> completion_signatures<value_t<>>;
 
     static auto is_always_nothrow_connectable() -> std::true_type;
 

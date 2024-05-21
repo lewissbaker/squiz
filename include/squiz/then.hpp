@@ -25,10 +25,12 @@ class then_op final
   : public inlinable_operation_state<then_op<Source, Func, Receiver>, Receiver>
   , public child_operation<
         then_op<Source, Func, Receiver>,
+        receiver_env_t<Receiver>,
         source_tag,
         Source> {
   using inlinable_base = inlinable_operation_state<then_op, Receiver>;
-  using child_base = child_operation<then_op, source_tag, Source>;
+  using child_base =
+      child_operation<then_op, receiver_env_t<Receiver>, source_tag, Source>;
 
 public:
   template <typename Func2>

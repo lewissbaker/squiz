@@ -89,6 +89,8 @@ TEST_CASE("let_value() store multiple values") {
   CHECK(receiver_invoked);
 }
 
+using stoppable_env = squiz::detail::env_with_stop_possible<squiz::empty_env>;
+
 TEST_CASE("let_value() cancellation of source") {
   squiz::manual_event_loop loop;
   auto sched = loop.get_scheduler();
@@ -113,7 +115,7 @@ TEST_CASE("let_value() cancellation of source") {
 
   struct receiver {
     bool& receiver_invoked;
-    squiz::empty_env get_env() const noexcept { return {}; }
+    stoppable_env get_env() const noexcept { return {}; }
     void set_result(
         squiz::value_t<std::unique_ptr<int>>, std::unique_ptr<int>) noexcept {
       CHECK(false);
@@ -167,7 +169,7 @@ TEST_CASE("let_value() cancellation of body") {
 
   struct receiver {
     bool& receiver_invoked;
-    squiz::empty_env get_env() const noexcept { return {}; }
+    stoppable_env get_env() const noexcept { return {}; }
     void set_result(
         squiz::value_t<std::unique_ptr<int>>, std::unique_ptr<int>) noexcept {
       CHECK(false);
@@ -209,7 +211,7 @@ TEST_CASE("let_value() cancellation, multiple threads") {
     std::binary_semaphore& sem;
     void set_result(squiz::value_t<>) noexcept { sem.release(); }
     void set_result(squiz::stopped_t) noexcept { sem.release(); }
-    squiz::empty_env get_env() const noexcept { return {}; }
+    stoppable_env get_env() const noexcept { return {}; }
   };
 
   std::array<std::uint32_t, 5> stage_counts{};
