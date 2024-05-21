@@ -28,5 +28,5 @@ struct completion_signatures_to_variant_of_tuple<
 template <typename Sigs>
 using completion_signatures_to_variant_of_tuple_t =
     typename completion_signatures_to_variant_of_tuple<Sigs>::type;
-  
-}
+
+}  // namespace squiz::detail

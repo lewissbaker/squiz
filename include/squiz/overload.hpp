@@ -7,15 +7,19 @@
 
 namespace squiz {
 
-  /// Helper for constructing an overload-set from a set of lambdas.
-  ///
-  /// \example
-  /// \begincode
-  /// // Calling with select between overloads using normal overload-resolution.
-  /// squiz::overload([](int x) {},
-  ///                 [](float x) {},
-  ///                 [](auto x) {})
-  /// \endcode
-  template <typename... Fs> struct overload : Fs... { using Fs::operator()...; };
-  template <typename... Fs> overload(Fs...) -> overload<Fs...>;
+/// Helper for constructing an overload-set from a set of lambdas.
+///
+/// \example
+/// \begincode
+/// // Calling with select between overloads using normal overload-resolution.
+/// squiz::overload([](int x) {},
+///                 [](float x) {},
+///                 [](auto x) {})
+/// \endcode
+template <typename... Fs>
+struct overload : Fs... {
+  using Fs::operator()...;
+};
+template <typename... Fs>
+overload(Fs...) -> overload<Fs...>;
 }  // namespace squiz

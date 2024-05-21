@@ -5,9 +5,9 @@
 ///////////////////////////////////////////////////////////////////////////////
 #include <squiz/inline_scheduler.hpp>
 
+#include <squiz/empty_env.hpp>
 #include <squiz/scheduler.hpp>
 #include <squiz/sender.hpp>
-#include <squiz/empty_env.hpp>
 
 #include <doctest/doctest.h>
 
@@ -23,7 +23,7 @@ TEST_CASE("squiz::inline_scheduler can schedule") {
   const squiz::inline_scheduler sched;
   squiz::sender auto s = sched.schedule();
 
-  struct receiver{
+  struct receiver {
     bool& receiver_invoked;
     void set_result(squiz::value_t<>) noexcept { receiver_invoked = true; }
     squiz::empty_env get_env() const noexcept { return {}; }

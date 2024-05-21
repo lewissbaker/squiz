@@ -9,8 +9,7 @@ namespace squiz {
 
 template <typename T>
 concept operation_state = std::destructible<T> && requires(T& op) {
-  { op.start() }
-  noexcept->std::same_as<void>;
+  { op.start() } noexcept -> std::same_as<void>;
 };
 
 /// An operation_state that supports receiving a stop-request by
@@ -22,8 +21,7 @@ concept operation_state = std::destructible<T> && requires(T& op) {
 /// (like calling any member-function on an object).
 template <typename T>
 concept stoppable_operation_state = operation_state<T> && requires(T& op) {
-  { op.request_stop() }
-  noexcept->std::same_as<void>;
+  { op.request_stop() } noexcept -> std::same_as<void>;
 };
 
 }  // namespace squiz

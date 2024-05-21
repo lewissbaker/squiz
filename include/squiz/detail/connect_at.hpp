@@ -12,7 +12,7 @@
 
 namespace squiz::detail {
 template <typename Sender, typename Receiver>
-requires connectable_to<Sender, Receiver>
+  requires connectable_to<Sender, Receiver>
 void connect_at(
     connect_result_t<Sender, Receiver>* op_state,
     Sender&& sender,

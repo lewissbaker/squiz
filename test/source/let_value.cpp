@@ -33,8 +33,9 @@ struct void_receiver {
 }  // namespace
 
 TEST_CASE("let_value() simplest case") {
-  auto s = squiz::let_value(
-      squiz::just_value_sender(), [] noexcept { return squiz::just_value_sender(); });
+  auto s = squiz::let_value(squiz::just_value_sender(), [] noexcept {
+    return squiz::just_value_sender();
+  });
 
   bool receiver_invoked = false;
   auto op = std::move(s).connect(void_receiver{receiver_invoked});
@@ -45,7 +46,8 @@ TEST_CASE("let_value() simplest case") {
 
 TEST_CASE("let_value() store a value") {
   auto s = squiz::let_value(
-      squiz::just_value_sender(std::string("hello")), [](std::string& s) noexcept {
+      squiz::just_value_sender(std::string("hello")),
+      [](std::string& s) noexcept {
         CHECK(s == "hello");
         return squiz::just_value_sender();
       });

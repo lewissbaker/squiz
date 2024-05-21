@@ -5,8 +5,8 @@
 ///////////////////////////////////////////////////////////////////////////////
 #pragma once
 
-#include <utility>
 #include <concepts>
+#include <utility>
 
 namespace squiz {
 
@@ -44,7 +44,7 @@ protected:
     : receiver_(std::move(r)) {}
 
   inlinable_operation_state(inlinable_operation_state&&) = delete;
-  
+
   Receiver& get_receiver() noexcept {
     static_assert(std::derived_from<Derived, inlinable_operation_state>);
     return receiver_;
@@ -57,16 +57,15 @@ private:
 // Specialisation for the case where the receiver can be reconstructed from the
 // address of the derived class.
 template <typename Derived, typename Receiver>
-requires requires(Derived* d) {
-  { Receiver::make_receiver(d) }
-  noexcept->std::same_as<Receiver>;
-}
+  requires requires(Derived* d) {
+    { Receiver::make_receiver(d) } noexcept -> std::same_as<Receiver>;
+  }
 struct inlinable_operation_state<Derived, Receiver> {
 protected:
   explicit inlinable_operation_state(Receiver&&) noexcept {}
 
   inlinable_operation_state(inlinable_operation_state&&) = delete;
-  
+
   Receiver get_receiver() noexcept {
     static_assert(std::derived_from<Derived, inlinable_operation_state>);
     return Receiver::make_receiver(static_cast<Derived*>(this));

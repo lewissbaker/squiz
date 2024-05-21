@@ -15,7 +15,7 @@ namespace squiz::detail {
 /// \tparam Ts...
 /// The pack to search within.
 template <typename T, typename... Ts>
-requires one_of<T, Ts...>
+  requires one_of<T, Ts...>
 inline constexpr std::size_t index_of_v =
     [](std::initializer_list<bool> matches) noexcept {
       std::size_t index = 0;

@@ -8,13 +8,12 @@
 #include <cstddef>
 
 namespace squiz {
-  struct source_tag {};
-  
-  /// A simple tag type that can be used as the \c Tag template parameter of
-  /// the \c variant_child_operation template in cases where there is only one
-  /// such child.
-  template<std::size_t Idx>
-  struct indexed_source_tag {};
+struct source_tag {};
 
-  
-}
+/// A simple tag type that can be used as the \c Tag template parameter of
+/// the \c variant_child_operation template in cases where there is only one
+/// such child.
+template <std::size_t Idx>
+struct indexed_source_tag {};
+
+}  // namespace squiz

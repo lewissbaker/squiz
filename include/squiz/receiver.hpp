@@ -5,8 +5,8 @@
 ///////////////////////////////////////////////////////////////////////////////
 #pragma once
 
-#include <squiz/concepts.hpp>
 #include <squiz/completion_signatures.hpp>
+#include <squiz/concepts.hpp>
 
 namespace squiz {
 

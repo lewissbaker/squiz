@@ -12,9 +12,9 @@
 namespace squiz {
 
 template <typename T>
-concept scheduler = std::copyable<T> && std::equality_comparable<T> &&
-    requires(const T sched) {
-  { sched.schedule() } -> sender;
-};
+concept scheduler =
+    std::copyable<T> && std::equality_comparable<T> && requires(const T sched) {
+      { sched.schedule() } -> sender;
+    };
 
 }  // namespace squiz
