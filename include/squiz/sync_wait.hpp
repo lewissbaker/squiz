@@ -6,7 +6,6 @@
 #pragma once
 
 #include <exception>
-#include <stop_token>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -16,6 +15,7 @@
 #include <squiz/manual_event_loop.hpp>
 #include <squiz/receiver.hpp>
 #include <squiz/sender.hpp>
+#include <squiz/single_inplace_stop_token.hpp>
 #include <squiz/detail/completion_signatures_to_variant_of_tuple.hpp>
 
 namespace squiz {
@@ -50,10 +50,8 @@ private:
 public:
   receiver get_receiver() noexcept { return receiver{*this}; }
 
+  single_inplace_stop_source ss;
   [[no_unique_address]] Result result;
-
-  // TODO: Replace with inplace_stop_source
-  std::stop_source ss;
   [[no_unique_address]] Env env;
 };
 
