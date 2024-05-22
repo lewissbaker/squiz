@@ -17,6 +17,7 @@
 #include <squiz/sender.hpp>
 #include <squiz/single_inplace_stop_token.hpp>
 #include <squiz/detail/completion_signatures_to_variant_of_tuple.hpp>
+#include <squiz/detail/store_result.hpp>
 
 namespace squiz {
 
@@ -30,17 +31,9 @@ private:
 
     template <typename Tag, typename... Datums>
     void set_result(
-        result_t<Tag, Datums...>, parameter_type<Datums>... datums) noexcept {
-      try {
-        state.result.template emplace<std::tuple<Tag, Datums...>>(
-            Tag{}, squiz::forward_parameter<Datums>(datums)...);
-      } catch (...) {
-        if constexpr (!(std::is_nothrow_move_constructible_v<Datums> && ...)) {
-          state->result
-              .template emplace<std::tuple<error_tag, std::exception_ptr>>(
-                  error_tag{}, std::current_exception());
-        }
-      }
+        result_t<Tag, Datums...> sig,
+        parameter_type<Datums>... datums) noexcept {
+      detail::store_result(state.result, sig, datums...);
       state.ss.request_stop();
     }
 
