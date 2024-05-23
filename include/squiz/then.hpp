@@ -85,7 +85,9 @@ public:
         this->get_receiver(), sig, squiz::forward_parameter<Datums>(datums)...);
   }
 
-  auto get_env(source_tag) noexcept { return this->get_receiver().get_env(); }
+  receiver_env_t<Receiver> get_env(source_tag) noexcept {
+    return this->get_receiver().get_env();
+  }
 
 private:
   [[no_unique_address]] Func func;

@@ -95,16 +95,17 @@ struct when_all_op<Receiver, std::index_sequence<Ids...>, ChildSenders...>
         Receiver>
   , child_operation<
         when_all_op<Receiver, std::index_sequence<Ids...>, ChildSenders...>,
-        receiver_env_t<Receiver>,
+        detail::make_env_with_stop_possible_t<receiver_env_t<Receiver>>,
         indexed_source_tag<Ids>,
         ChildSenders>... {
 private:
+  using env_t = detail::make_env_with_stop_possible_t<receiver_env_t<Receiver>>;
   using inlinable_base_t = inlinable_operation_state<when_all_op, Receiver>;
 
   template <std::size_t Idx>
   using child_base_t = child_operation<
       when_all_op,
-      receiver_env_t<Receiver>,
+      env_t,
       indexed_source_tag<Idx>,
       ChildSenders...[Idx]>;
 
@@ -206,9 +207,8 @@ public:
   }
 
   template <std::size_t Idx>
-  detail::env_with_stop_possible<receiver_env_t<Receiver>>
-  get_env(indexed_source_tag<Idx>) noexcept {
-    return detail::env_with_stop_possible{this->get_receiver().get_env()};
+  env_t get_env(indexed_source_tag<Idx>) noexcept {
+    return env_t{this->get_receiver().get_env()};
   }
 
 private:
@@ -307,11 +307,9 @@ private:
         std::get<Idx>(value_results_));
   }
 
-  using error_or_stopped_sigs_t =
-      merge_completion_signatures_t<error_or_stopped_signatures_t<
-          detail::add_error_if_move_can_throw_t<completion_signatures_for_t<
-              ChildSenders,
-              receiver_env_t<Receiver>>>>...>;
+  using error_or_stopped_sigs_t = merge_completion_signatures_t<
+      error_or_stopped_signatures_t<detail::add_error_if_move_can_throw_t<
+          completion_signatures_for_t<ChildSenders, env_t>>>...>;
 
   using error_or_stopped_result_t =
       detail::completion_signatures_to_variant_of_tuple_t<
@@ -394,6 +392,11 @@ public:
     arrive();
   }
 
+  template <std::size_t Idx>
+  receiver_env_t<Receiver> get_env(indexed_source_tag<Idx>) noexcept {
+    return this->get_receiver().get_env();
+  }
+
 private:
   void arrive() noexcept {
     if (state_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
@@ -467,7 +470,7 @@ struct when_all_sender {
                   detail::env_with_stop_possible<Env>...>>...>,
           error_or_stopped_signatures_t<completion_signatures_for_t<
               detail::member_type_t<Self, ChildSenders>,
-              detail::env_with_stop_possible<Env>...>>...>;
+              detail::make_env_with_stop_possible_t<Env>...>>...>;
 
   template <typename Self, typename... Env>
     requires(when_all_detail::when_all_child_always_succeeds<
@@ -486,7 +489,7 @@ struct when_all_sender {
       -> std::bool_constant<
           (squiz::is_always_nothrow_connectable_v<
                detail::member_type_t<Self, ChildSenders>,
-               detail::env_with_stop_possible<Env>...> &&
+               detail::make_env_with_stop_possible_t<Env>...> &&
            ...)>;
 
   template <typename... ChildSenders2>

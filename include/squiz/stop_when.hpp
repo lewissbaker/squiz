@@ -37,25 +37,21 @@ class stop_when_op
         Receiver>
   , public child_operation<
         stop_when_op<Source, Trigger, Receiver>,
-        detail::env_with_stop_possible<receiver_env_t<Receiver>>,
+        detail::make_env_with_stop_possible_t<receiver_env_t<Receiver>>,
         source_tag,
         Source>
   , public child_operation<
         stop_when_op<Source, Trigger, Receiver>,
-        detail::env_with_stop_possible<receiver_env_t<Receiver>>,
+        detail::make_env_with_stop_possible_t<receiver_env_t<Receiver>>,
         trigger_tag,
         Trigger> {
+  using env = detail::make_env_with_stop_possible_t<receiver_env_t<Receiver>>;
+
   using inline_base = inlinable_operation_state<stop_when_op, Receiver>;
-  using source_child_base = child_operation<
-      stop_when_op,
-      detail::env_with_stop_possible<receiver_env_t<Receiver>>,
-      source_tag,
-      Source>;
-  using trigger_child_base = child_operation<
-      stop_when_op,
-      detail::env_with_stop_possible<receiver_env_t<Receiver>>,
-      trigger_tag,
-      Trigger>;
+  using source_child_base =
+      child_operation<stop_when_op, env, source_tag, Source>;
+  using trigger_child_base =
+      child_operation<stop_when_op, env, trigger_tag, Trigger>;
 
   static constexpr bool is_stop_possible =
       is_stop_possible_v<receiver_env_t<Receiver>> &&
@@ -181,6 +177,14 @@ public:
     trigger_completed();
   }
 
+  env get_env(source_tag) const noexcept {
+    return env{this->get_receiver().get_env()};
+  }
+
+  env get_env(trigger_tag) const noexcept {
+    return env{this->get_receiver().get_env()};
+  }
+
 private:
   using result_variant_t = detail::completion_signatures_to_variant_of_tuple_t<
       detail::add_error_if_move_can_throw_t<completion_signatures_for_t<
@@ -278,17 +282,17 @@ struct stop_when_sender {
   auto get_completion_signatures(this Self&&, Env...)
       -> detail::add_error_if_move_can_throw_t<completion_signatures_for_t<
           detail::member_type_t<Self, Source>,
-          detail::env_with_stop_possible<Env>...>>;
+          detail::make_env_with_stop_possible_t<Env>...>>;
 
   template <typename Self, typename... Env>
   auto is_always_nothrow_connectable(this Self&&, Env...)
       -> std::bool_constant<
           (is_always_nothrow_connectable_v<
                detail::member_type_t<Self, Source>,
-               detail::env_with_stop_possible<Env>...> &&
+               detail::make_env_with_stop_possible_t<Env>...> &&
            is_always_nothrow_connectable_v<
                detail::member_type_t<Self, Trigger>,
-               detail::env_with_stop_possible<Env>...>)>;
+               detail::make_env_with_stop_possible_t<Env>...>)>;
 
   template <typename Self, typename Receiver>
   stop_when_op<
