@@ -33,7 +33,7 @@ concept copyable_sender = sender<T> && std::copy_constructible<T>;
 //
 
 template <typename Sender, typename... Env>
-struct completion_signatures_for {};
+struct completion_signatures_for;
 
 template <typename Sender, typename Env>
   requires requires(Sender&& sender, Env env) {
