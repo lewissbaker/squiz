@@ -70,11 +70,17 @@ public:
   void start() noexcept {
     source_child_base::start();
 
+    // NOTE: Disabling this optimization to allow the trigger operation to start and
+    // release its resources on completion. Once we come up with a way to ensure that
+    // the operation-states are promptly destroyed upon completion we can reinstate
+    // this optimization.
+#if 0
     if (state_.load(std::memory_order_acquire) == source_completed_flag) {
       // Completed synchronously - don't bother to start the trigger operation.
       deliver_result();
       return;
     }
+#endif
 
     trigger_child_base::start();
 
