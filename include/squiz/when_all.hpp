@@ -521,6 +521,9 @@ private:
   [[no_unique_address]] std::tuple<ChildSenders...> children;
 };
 
+template <typename... Senders>
+when_all_sender(Senders...) -> when_all_sender<Senders...>;
+
 template <typename... ChildSenders>
   requires(sizeof...(ChildSenders) >= 2)  //
 auto when_all(ChildSenders&&... cs) noexcept(
