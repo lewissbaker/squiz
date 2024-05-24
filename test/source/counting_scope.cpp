@@ -8,6 +8,7 @@
 #include <squiz/empty_env.hpp>
 #include <squiz/just.hpp>
 #include <squiz/let_value.hpp>
+#include <squiz/statement.hpp>
 #include <squiz/stop_when.hpp>
 #include <squiz/sync_wait.hpp>
 #include <squiz/then.hpp>
@@ -252,10 +253,11 @@ TEST_CASE("counting_scope - multi-threaded stress test") {
     squiz::counting_scope scope;
 
     squiz::sync_wait(squiz::when_all_sender(
-        squiz::stop_when_sender(
+        squiz::statement_sender(squiz::stop_when_sender(
             scope.get_token().nest(loop1.get_scheduler().schedule()),
-            scope.get_token().nest(loop2.get_scheduler().schedule())),
-        scope.get_token().nest(loop3.get_scheduler().schedule()),
+            scope.get_token().nest(loop2.get_scheduler().schedule()))),
+        squiz::statement_sender(
+            scope.get_token().nest(loop3.get_scheduler().schedule())),
         squiz::unstoppable_sender(
             squiz::let_value(loop4.get_scheduler().schedule(), [&] noexcept {
               return scope.join();
