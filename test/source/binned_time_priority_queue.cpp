@@ -191,3 +191,85 @@ TEST_CASE("binned_time_priority_queue - performance") {
   std::print("cost:  {} ns/item\n", time / item_count);
   std::print("max_count: {}\n", max_count);
 }
+
+namespace {
+struct simple_item64 {
+  simple_item64* next{nullptr};
+  simple_item64* prev{nullptr};
+  std::uint64_t due_time{0};
+};
+
+struct get_simple_item64_due_time {
+  static std::uint64_t operator()(const simple_item64* item) noexcept {
+    return item->due_time;
+  }
+};
+}  // namespace
+
+TEST_CASE("binned_time_priority_queue - iouring_context bug") {
+  using queue_t = squiz::detail::binned_time_priority_queue<
+      simple_item64,
+      &simple_item64::next,
+      &simple_item64::prev,
+      std::uint64_t,
+      get_simple_item64_due_time,
+      ((std::uint64_t(1) << 48) - 1U)>;
+
+  queue_t queue;
+  auto* item = queue.try_dequeue_next_due_by(0x11efeb0b);
+  CHECK(item == nullptr);
+
+  item = queue.try_dequeue_next_due_by(0x11efeb1a);
+  CHECK(item == nullptr);
+
+  simple_item64 item1;
+  item1.due_time = 0x11f01204;
+  queue.add(&item1);
+
+  simple_item64 item2;
+  item2.due_time = 0x11f06024;
+  queue.add(&item2);
+
+  simple_item64 item3;
+  item3.due_time = 0x11effe7c;
+  queue.add(&item3);
+
+  item = queue.try_dequeue_next_due_by(300936026);
+  CHECK(item == nullptr);
+
+  item = queue.try_dequeue_next_due_by(300936057);
+  CHECK(item == nullptr);
+
+  item = queue.try_dequeue_next_due_by(300940829);
+  CHECK(item == nullptr);
+
+  item = queue.try_dequeue_next_due_by(300940936);
+  CHECK(item == &item3);
+
+  item = queue.try_dequeue_next_due_by(300940936);
+  CHECK(item == nullptr);
+
+  item = queue.try_dequeue_next_due_by(300945603);
+  CHECK(item == nullptr);
+
+  item = queue.try_dequeue_next_due_by(300946058);
+  CHECK(item == &item1);
+
+  item = queue.try_dequeue_next_due_by(300946058);
+  CHECK(item == nullptr);
+
+  item = queue.try_dequeue_next_due_by(300965184);
+  CHECK(item == nullptr);
+
+  item = queue.try_dequeue_next_due_by(300965184);
+  CHECK(item == nullptr);
+
+  item = queue.try_dequeue_next_due_by(300965908);
+  CHECK(item == nullptr);
+
+  item = queue.try_dequeue_next_due_by(300965932);
+  CHECK(item == &item2);
+
+  item = queue.try_dequeue_next_due_by(300965932);
+  CHECK(item == nullptr);
+}
