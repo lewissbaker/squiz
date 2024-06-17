@@ -318,6 +318,12 @@ public:
   /// honoured.
   Item* try_dequeue_next_due_by(Timestamp current_time) noexcept;
 
+  /// Reindex all items currently in the queue.
+  ///
+  /// Call this whenever something changes that invalidates the computation
+  /// of the due-time for items in the queue.
+  void reindex_items() noexcept;
+
 private:
   static constexpr std::uint32_t minor_bins_per_major_bin =
       MinorBinsPerMajorBin;
@@ -772,7 +778,46 @@ __attribute__((noinline)) Item* binned_time_priority_queue<
     mark_bin_empty(first_nonempty_bin_);
   }
 
+  assert(get_item_due_time(item) <= current_time);
+
   return item;
+}
+
+template <
+    typename Item,
+    Item* Item::* Next,
+    Item* Item::* Prev,
+    std::unsigned_integral Timestamp,
+    std::regular_invocable<const Item*> GetTimestampFunc,
+    Timestamp MaxTimestamp,
+    std::uint32_t MinorBinsPerMajorBin>
+  requires std::move_constructible<GetTimestampFunc> &&
+    std::is_nothrow_invocable_r_v<
+               Timestamp,
+               const GetTimestampFunc&,
+               const Item*>
+__attribute__((noinline)) void binned_time_priority_queue<
+    Item,
+    Next,
+    Prev,
+    Timestamp,
+    GetTimestampFunc,
+    MaxTimestamp,
+    MinorBinsPerMajorBin>::reindex_items() noexcept {
+  intrusive_list<Item, Next, Prev> all_items;
+
+  while (first_nonempty_bin_ != total_bin_count) {
+    auto& bin = bins_[first_nonempty_bin_];
+    all_items.append(std::move(bin));
+    nonempty_bins_.set(first_nonempty_bin_, false);
+    first_nonempty_bin_ = nonempty_bins_.countr_zero();
+  }
+
+  active_time_ = 0;
+
+  while (!all_items.empty()) {
+    add(all_items.pop_front());
+  }
 }
 
 }  // namespace squiz::detail
