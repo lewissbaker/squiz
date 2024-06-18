@@ -27,7 +27,12 @@ endif()
 # ---- Create binary ----
 
 file(GLOB sources CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp)
-add_executable(${PROJECT_NAME} ${sources})
+file(GLOB linux_sources CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/source/linux/*.cpp)
+if (CMAKE_SYSTEM_NAME MATCHES "Linux")
+  add_executable(${PROJECT_NAME} ${sources} ${linux_sources})
+else()
+  add_executable(${PROJECT_NAME} ${sources})
+endif()
 target_link_libraries(${PROJECT_NAME} doctest::doctest Squiz::Squiz)
 target_link_libraries(${PROJECT_NAME} Squiz::Squiz)
 # set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 26)

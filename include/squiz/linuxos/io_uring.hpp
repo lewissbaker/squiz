@@ -90,6 +90,17 @@ public:
   /// they were invalid.
   [[nodiscard]] std::uint32_t submission_queue_dropped() const noexcept;
 
+  /// The current position of the tail index.
+  ///
+  /// This is the index of the next SQE to write to.
+  [[nodiscard]] std::uint32_t submission_queue_tail_position() const noexcept {
+    return sqe_tail_;
+  }
+
+  /// The maximum value that the tail position can be advanced to before the
+  /// submission queue has no space left.
+  [[nodiscard]] std::uint32_t submission_queue_tail_limit() const noexcept;
+
   /// Enqueue the specified SQE to the ring-buffer.
   ///
   /// This must be the pointer that was retrieved from
@@ -312,7 +323,7 @@ public:
   submit_and_wait_for(std::chrono::nanoseconds timeout) noexcept;
   std::error_code submit_and_wait_for(
       std::uint32_t min_complete, std::chrono::nanoseconds timeout) noexcept;
-  
+
   /////////////////////////////////////////////////
   /// Submission queue entries
 

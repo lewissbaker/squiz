@@ -17,6 +17,7 @@
 // HACK:
 
 #if 0
+#  include <cinttypes>
 #  include <cstdio>
 
 #  define LOG(...)              \
@@ -345,14 +346,28 @@ std::uint32_t io_uring::submission_queue_dropped() const noexcept {
   return dropped_ref.load(std::memory_order_relaxed);
 }
 
+std::uint32_t io_uring::submission_queue_tail_limit() const noexcept {
+  std::atomic_ref<const volatile std::uint32_t> head_ref{*sq_head_};
+  std::uint32_t head = head_ref.load(std::memory_order_acquire);
+  return head + sq_entry_count_;
+}
+
 void io_uring::enqueue_entry_for_submission(io_uring_sqe* sqe) noexcept {
   assert(submission_queue_space_left() > 0);
   std::uint32_t sqe_index = (sqe - sq_entries_);
   std::uint32_t sq_index = sqe_tail_++;
   sq_index_array_[sq_index] = sqe_index;
+
+  LOG("io_uring::enqueue_entry_for_submission(opcode=%u, user_data=0x%" PRIx64
+      ", sqe_index=%u, sq_index=%u)",
+      static_cast<std::uint32_t>(sqe->opcode),
+      static_cast<std::uint64_t>(sqe->user_data),
+      sqe_index,
+      sq_index);
 }
 
 std::uint32_t io_uring::flush_submission_queue() noexcept {
+  LOG("io_uring::flush_submission_queue()");
   std::uint32_t tail = sqe_tail_;
   if (tail != sqe_head_) {
     sqe_head_ = tail;
@@ -366,6 +381,9 @@ std::uint32_t io_uring::flush_submission_queue() noexcept {
 
   std::atomic_ref<const volatile std::uint32_t> head_ref{*sq_head_};
   std::uint32_t head = head_ref.load(std::memory_order_acquire);
+
+  LOG("Updated submission queue to (head=%u, tail=%u)", head, tail);
+
   return tail - head;
 }
 
@@ -678,6 +696,32 @@ void io_uring::prepare_close_op(
   std::memset(sqe, 0, sizeof(io_uring_sqe));
   sqe->opcode = IORING_OP_CLOSE;
   sqe->fd = fd;
+  sqe->user_data = user_data;
+}
+
+void io_uring::prepare_cancel_op(
+    io_uring_sqe* sqe,
+    std::uint64_t user_data_to_cancel,
+    std::uint64_t user_data) noexcept {
+  std::memset(sqe, 0, sizeof(io_uring_sqe));
+  sqe->opcode = IORING_OP_ASYNC_CANCEL;
+  sqe->addr = user_data_to_cancel;
+  sqe->user_data = user_data;
+}
+
+void io_uring::prepare_openat_op(
+    io_uring_sqe* sqe,
+    int dirfd,
+    const char* path,
+    std::uint32_t open_flags,
+    mode_t mode,
+    std::uint64_t user_data) noexcept {
+  std::memset(sqe, 0, sizeof(io_uring_sqe));
+  sqe->opcode = IORING_OP_OPENAT;
+  sqe->fd = dirfd;
+  sqe->open_flags = open_flags;
+  sqe->addr = reinterpret_cast<std::uintptr_t>(path);
+  sqe->len = mode;
   sqe->user_data = user_data;
 }
 

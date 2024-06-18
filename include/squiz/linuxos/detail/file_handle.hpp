@@ -40,6 +40,8 @@ public:
 
   void close() noexcept;
 
+  int release() noexcept { return std::exchange(fd_, invalid_file_handle); }
+
 private:
   int fd_;
 };
