@@ -68,8 +68,8 @@ using result_variant_t = detail::completion_signatures_to_variant_of_tuple_t<
 
 }  // namespace sync_wait_detail
 
-template <typename Src>
-inline auto sync_wait(Src&& src, manual_event_loop& loop) {
+  template <typename Src, typename DrivableContext>
+inline auto sync_wait(Src&& src, DrivableContext& loop) {
   using result_t = sync_wait_detail::result_variant_t<Src, empty_env>;
   sync_wait_detail::sync_wait_state<result_t, empty_env> state;
   auto op = std::forward<Src>(src).connect(state.get_receiver());
@@ -82,7 +82,7 @@ inline auto sync_wait(Src&& src, manual_event_loop& loop) {
 template <typename Src>
 inline auto sync_wait(Src&& src) {
   manual_event_loop loop;
-  return sync_wait(std::forward<Src>(src), loop);
+  return squiz::sync_wait(std::forward<Src>(src), loop);
 }
 
 }  // namespace squiz
