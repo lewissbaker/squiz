@@ -18,6 +18,7 @@
 #include <squiz/variant_child_operation.hpp>
 #include <squiz/detail/add_error_if_move_can_throw.hpp>
 #include <squiz/detail/completion_signatures_to_variant_of_tuple.hpp>
+#include <squiz/detail/deliver_result.hpp>
 #include <squiz/detail/dispatch_index.hpp>
 #include <squiz/detail/member_type.hpp>
 #include <squiz/detail/smallest_unsigned_integer.hpp>
@@ -329,24 +330,7 @@ private:
 
   // Send the result
   void dispatch_result() noexcept {
-    std::visit(
-        squiz::overload(
-            [](std::monostate) noexcept {
-              assert(false);
-              std::unreachable();
-            },
-            [&]<typename Tag, typename... Datums>(
-                std::tuple<Tag, Datums...>& result) noexcept {
-              std::apply(
-                  [&](Tag, Datums&... datums) noexcept {
-                    squiz::set_result(
-                        this->get_receiver(),
-                        squiz::result<Tag, Datums...>,
-                        squiz::forward_parameter<Datums>(datums)...);
-                  },
-                  result);
-            }),
-        result_storage_);
+    detail::deliver_result(this->get_receiver(), result_storage_);
   }
 
 public:
@@ -381,15 +365,7 @@ public:
 
       old_state = state_.fetch_add(body_done_flag, std::memory_order_acq_rel);
       if (can_complete_inline(old_state)) {
-        std::apply(
-            [&](Tag, Datums&... tuple_datums) noexcept {
-              squiz::set_result(
-                  this->get_receiver(),
-                  sig,
-                  squiz::forward_parameter<Datums>(tuple_datums)...);
-              return;
-            },
-            result);
+        detail::deliver_result_tuple(this->get_receiver(), result);
       }
     } catch (...) {
       const bool is_nothrow =
@@ -402,8 +378,7 @@ public:
 
         old_state = state_.fetch_add(body_done_flag, std::memory_order_acq_rel);
         if (can_complete_inline(old_state)) {
-          squiz::set_error<std::exception_ptr>(
-              this->get_receiver(), std::move(std::get<1>(err)));
+          detail::deliver_result_tuple(this->get_receiver(), err);
         }
       } else {
         assert(false);

@@ -15,6 +15,18 @@
 
 namespace squiz::detail {
 
+template <typename Receiver, typename ResultTuple>
+void deliver_result_tuple(Receiver&& r, ResultTuple& result) noexcept {
+  std::apply(
+      [&r]<typename Tag, typename... Datums>(Tag, Datums&... datums) noexcept {
+        squiz::set_result(
+            r,
+            squiz::result<Tag, Datums...>,
+            squiz::forward_parameter<Datums>(datums)...);
+      },
+      result);
+}
+
 template <typename Receiver, typename ResultVariantOfTuples>
 void deliver_result(Receiver&& r, ResultVariantOfTuples& result) noexcept {
   std::visit(
@@ -25,14 +37,7 @@ void deliver_result(Receiver&& r, ResultVariantOfTuples& result) noexcept {
           },
           [&r]<typename Tag, typename... Datums>(
               std::tuple<Tag, Datums...>& result_tuple) noexcept {
-            std::apply(
-                [&r](Tag, Datums&... datums) noexcept {
-                  squiz::set_result(
-                      r,
-                      squiz::result<Tag, Datums...>,
-                      squiz::forward_parameter<Datums>(datums)...);
-                },
-                result_tuple);
+            deliver_result_tuple(r, result_tuple);
           }),
       result);
 }

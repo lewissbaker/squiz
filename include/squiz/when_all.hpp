@@ -23,6 +23,7 @@
 #include <squiz/source_tag.hpp>
 #include <squiz/detail/add_error_if_move_can_throw.hpp>
 #include <squiz/detail/completion_signatures_to_variant_of_tuple.hpp>
+#include <squiz/detail/deliver_result.hpp>
 #include <squiz/detail/env_with_stop_possible.hpp>
 #include <squiz/detail/member_type.hpp>
 #include <squiz/detail/smallest_unsigned_integer.hpp>
@@ -255,21 +256,7 @@ private:
 
   void deliver_result() noexcept {
     if (error_or_stopped_.index() != 0) {
-      std::visit(
-          overload(
-              [](std::monostate) noexcept { std::unreachable(); },
-              [this]<typename SignalTag, typename... Datums>(
-                  std::tuple<SignalTag, Datums...>& tup) noexcept {
-                std::apply(
-                    [this](SignalTag, Datums&... datums) noexcept {
-                      squiz::set_result(
-                          this->get_receiver(),
-                          squiz::result<SignalTag, Datums...>,
-                          squiz::forward_parameter<Datums>(datums)...);
-                    },
-                    tup);
-              }),
-          error_or_stopped_);
+      detail::deliver_result(this->get_receiver(), error_or_stopped_);
     } else {
       deliver_value(std::integral_constant<std::size_t, 0>{}, squiz::value<>);
     }

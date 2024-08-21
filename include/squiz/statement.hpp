@@ -104,14 +104,7 @@ public:
             auto& datums_copy = state_.result.template emplace<result_t>(
                 Tag{}, std::forward<Datums>(datums)...);
             child_base::destruct();
-            std::apply(
-                [&](Tag, Datums&... datums) noexcept {
-                  squiz::set_result(
-                      this->get_receiver(),
-                      sig,
-                      squiz::forward_parameter<Datums>(datums)...);
-                },
-                datums_copy);
+	    detail::deliver_result_tuple(this->get_receiver(), datums_copy);
           } catch (...) {
             if constexpr (!is_nothrow) {
               child_base::destruct();
@@ -145,14 +138,7 @@ public:
             // completed_flag. We can just destroy the op-state and deliver the
             // result.
             child_base::destruct();
-            std::apply(
-                [&](Tag, Datums&...) noexcept {
-                  squiz::set_result(
-                      this->get_receiver(),
-                      sig,
-                      squiz::forward_parameter<Datums>(datums)...);
-                },
-                datums_copy);
+	    detail::deliver_result_tuple(this->get_receiver(), datums_copy);
           }
         } catch (...) {
           if constexpr (!is_nothrow) {
@@ -183,17 +169,10 @@ public:
         // They might be references to objects in the op-state.
         // So we copy them to the stack first before destroying the op-state.
         try {
-          std::tuple<Datums...> datums_copy{std::forward<Datums>(datums)...};
+          std::tuple<Tag, Datums...> datums_copy{Tag{}, std::forward<Datums>(datums)...};
           child_base::destruct();
           state_.destroyed = true;
-          std::apply(
-              [&](Datums&...) noexcept {
-                squiz::set_result(
-                    this->get_receiver(),
-                    sig,
-                    squiz::forward_parameter<Datums>(datums)...);
-              },
-              datums_copy);
+	  detail::deliver_result_tuple(this->get_receiver(), datums_copy);
         } catch (...) {
           if constexpr (!is_nothrow) {
             child_base::destruct();
